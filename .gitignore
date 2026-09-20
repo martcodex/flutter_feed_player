@@ -1,0 +1,19 @@
+# https://dart.dev/guides/libraries/private-files
+# Created by `flutter create`
+.dart_tool/
+.packages
+build/
+pubspec.lock
+
+# IntelliJ
+.idea/
+*.iml
+
+# Misc
+.DS_Store
+*.log
+coverage/
+
+# Example lock is useful for demos; package root lock is not published
+example/.dart_tool/
+example/build/
