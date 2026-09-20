@@ -4,8 +4,6 @@ Vertical **short-video feed** and **series episode** players for Flutter, built 
 
 Extracted from production TikTok-style / binge-episode UX patterns (parked controller promote, adjacent warm-up, exclusive audio). Host apps inject playable data — **no backend client is included**.
 
-Publish target: [pub.dev](https://pub.dev).
-
 ## Demo
 
 Swipe feed, pull-to-refresh, and load-more in the example app:
