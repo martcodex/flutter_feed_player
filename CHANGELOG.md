@@ -5,9 +5,6 @@
 * Extract default chrome into public widgets (`FeedPlayerChrome`, `EpisodePlayerChrome`, and building blocks).
 * `FeedPlayer` / `EpisodePlayer` remain convenience wrappers (view + default chrome).
 * Customize via `overlayBuilder`, or compose chrome pieces freely.
-
-## 0.1.1
-
 * Playback UX: cold-start watchdog, retry overlay, forward-swipe lock while
   first frame is loading, eager next-item warm on forward drag intent.
 * Feed clips can loop (`loopClips`).

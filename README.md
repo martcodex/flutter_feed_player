@@ -10,7 +10,7 @@ Publish target: [pub.dev](https://pub.dev).
 
 Swipe feed, pull-to-refresh, and load-more in the example app:
 
-![Demo](docs/demo.gif)
+![Demo](doc/demo.gif)
 
 ## Features
 
