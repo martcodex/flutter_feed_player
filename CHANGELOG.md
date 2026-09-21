@@ -1,3 +1,9 @@
+## 0.1.2
+
+* Raise `video_player` lower bound to `^2.10.0` (requires `VideoViewType`).
+* Require Flutter `>=3.27.0` to match `video_player` 2.10.0.
+* Shorten package description for pub.dev (60–180 characters).
+
 ## 0.1.1
 
 * Separate player core from UI components.

@@ -1,9 +1,8 @@
 name: flutter_feed_player
-description: >
-  Vertical short-video feed player and series episode player for Flutter.
-  Built on video_player with park/promote preloading for TikTok-style feeds
-  and binge episode swiping. No backend required — host apps inject playable data.
-version: 0.1.1
+description: >-
+  Vertical short-video feed and series episode player for Flutter with
+  park/promote preloading. No backend required.
+version: 0.1.2
 homepage: https://github.com/martcodex/flutter_feed_player
 repository: https://github.com/martcodex/flutter_feed_player
 issue_tracker: https://github.com/martcodex/flutter_feed_player/issues
@@ -16,12 +15,12 @@ topics:
 
 environment:
   sdk: ^3.6.0
-  flutter: ">=3.24.0"
+  flutter: ">=3.27.0"
 
 dependencies:
   flutter:
     sdk: flutter
-  video_player: ^2.9.5
+  video_player: ^2.10.0
 
 dev_dependencies:
   flutter_test:
