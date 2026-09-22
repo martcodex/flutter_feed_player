@@ -1,4 +1,4 @@
-## Unreleased
+## 0.1.3
 
 * Add `MediaFormat` for URL / `assetType` detection, chrome badges, and
   platform support checks (`isSupportedOnCurrentPlatform`, `unsupportedReason`).

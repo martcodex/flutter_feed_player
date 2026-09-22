@@ -65,7 +65,7 @@ FeedPlayerController / EpisodePlayerController   (loader 分页)
 
 ```yaml
 dependencies:
-  flutter_feed_player: ^0.1.2
+  flutter_feed_player: ^0.1.3
 ```
 
 ```sh
