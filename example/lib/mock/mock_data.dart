@@ -1,6 +1,7 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_feed_player/flutter_feed_player.dart';
 
-/// Catalog entry for the format showcase (MP4 / HLS groups).
+/// Catalog entry for the format showcase.
 class SampleClip {
   const SampleClip({
     required this.id,
@@ -15,25 +16,46 @@ class SampleClip {
   final String title;
   final String url;
 
-  /// `mp4` or `hls`
+  /// `mp4` | `hls` | `webm` | `mov` | `m4v` | `dash`
   final String format;
   final String source;
   final String description;
 
-  bool get isHls => format == 'hls' || url.toLowerCase().contains('.m3u8');
+  bool get isHls =>
+      format == 'hls' || url.toLowerCase().contains('.m3u8');
 
-  String get formatLabel => isHls ? 'M3U8 / HLS' : 'MP4';
+  String get formatLabel => MediaFormat.labelFor(
+        url: url,
+        assetType: format,
+      );
+
+  bool get isSupportedHere => MediaFormat.isKindSupportedOnCurrentPlatform(
+        format,
+      );
 }
 
-/// Open sample streams for demos — probed reachable (HTTP 200) where possible.
+/// Format filter for feed / episode mock loaders and the home type list.
+enum MockFormatFilter {
+  mp4,
+  hls,
+  webm,
+  mov,
+  m4v,
+  dash,
+  all,
+}
+
+/// Demo catalog.
 ///
-/// MP4: Flutter docs assets.
-/// HLS: Mux test-streams + Apple developer HLS examples + Unified Streaming.
+/// Network samples must support HTTP Range (AVPlayer requirement).
+/// WebM stays as a bundled asset (Android / Web only).
 class MockVideos {
   static const bee =
       'https://flutter.github.io/assets-for-api-docs/assets/videos/bee.mp4';
   static const butterfly =
       'https://flutter.github.io/assets-for-api-docs/assets/videos/butterfly.mp4';
+  static const mdnFlowerMp4 =
+      'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4';
 
   /// Mux Big Buck Bunny adaptive HLS
   static const muxBunny =
@@ -59,9 +81,33 @@ class MockVideos {
   static const appleBipbop =
       'https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_16x9/bipbop_16x9_variant.m3u8';
 
-  /// Unified Streaming — Tears of Steel
+  /// Unified Streaming — Tears of Steel HLS
   static const unifiedTears =
       'https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.m3u8';
+
+  /// SampleFile — H.264 yuv420p MOV with HTTP Range (AVPlayer-safe).
+  static const samplefileMovH264 =
+      'https://samplefile.com/samples/download/video/mov/mov_h264_aac_edit_sample.mov';
+
+  /// TrueFileSize — H.264 baseline MOV, Accept-Ranges: bytes.
+  static const truefilesizeMov5mb =
+      'https://cdn.truefilesize.com/mov/sample-5mb.mov';
+
+  /// SampleFile — public M4V samples (Range OK).
+  static const samplefileM4v200 =
+      'https://samplefile.com/samples/download/video/m4v/m4v_sample_file_200KB.m4v';
+  static const samplefileM4v500 =
+      'https://samplefile.com/samples/download/video/m4v/m4v_sample_file_500KB.m4v';
+
+  /// Bundled WebM for Android / Web demos (AVPlayer cannot decode WebM).
+  static const assetWebm = 'asset://assets/videos/flower.webm';
+
+  static const dashEnvivio =
+      'https://dash.akamaized.net/envivio/EnvivioDash3/manifest.mpd';
+  static const dashBbb =
+      'https://dash.akamaized.net/akamai/bbb_30fps/bbb_30fps.mpd';
+  static const dashUnifiedTears =
+      'https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.mpd';
 
   static const covers = <String>[
     'https://picsum.photos/seed/feed1/720/1280',
@@ -91,6 +137,14 @@ class MockVideos {
       format: 'mp4',
       source: 'Flutter docs',
       description: 'Short progressive MP4 — good for feed swipe demos.',
+    ),
+    SampleClip(
+      id: 'mp4_mdn_flower',
+      title: 'MDN Flower',
+      url: mdnFlowerMp4,
+      format: 'mp4',
+      source: 'MDN',
+      description: 'CC0 flower clip (progressive MP4, Range OK).',
     ),
   ];
 
@@ -153,11 +207,144 @@ class MockVideos {
     ),
   ];
 
-  static List<SampleClip> get allSamples => [...mp4Samples, ...hlsSamples];
+  static const webmSamples = <SampleClip>[
+    SampleClip(
+      id: 'webm_flower_asset',
+      title: 'Flower WebM (asset)',
+      url: assetWebm,
+      format: 'webm',
+      source: 'Bundled asset',
+      description: 'Local WebM — Android / Web only (AVPlayer cannot decode).',
+    ),
+  ];
+
+  static const movSamples = <SampleClip>[
+    SampleClip(
+      id: 'mov_samplefile_h264',
+      title: 'SampleFile H.264 MOV',
+      url: samplefileMovH264,
+      format: 'mov',
+      source: 'SampleFile',
+      description: 'Public QuickTime MOV (H.264 yuv420p, HTTP Range OK).',
+    ),
+    SampleClip(
+      id: 'mov_truefilesize_5mb',
+      title: 'TrueFileSize 5MB MOV',
+      url: truefilesizeMov5mb,
+      format: 'mov',
+      source: 'TrueFileSize',
+      description: 'Public H.264 baseline MOV (~5MB) with Accept-Ranges.',
+    ),
+  ];
+
+  static const m4vSamples = <SampleClip>[
+    SampleClip(
+      id: 'm4v_samplefile_200',
+      title: 'SampleFile M4V 200KB',
+      url: samplefileM4v200,
+      format: 'm4v',
+      source: 'SampleFile',
+      description: 'Public M4V sample with HTTP Range support.',
+    ),
+    SampleClip(
+      id: 'm4v_samplefile_500',
+      title: 'SampleFile M4V 500KB',
+      url: samplefileM4v500,
+      format: 'm4v',
+      source: 'SampleFile',
+      description: 'Public M4V sample (~500KB), Range OK.',
+    ),
+  ];
+
+  static const dashSamples = <SampleClip>[
+    SampleClip(
+      id: 'dash_envivio',
+      title: 'Envivio DASH',
+      url: dashEnvivio,
+      format: 'dash',
+      source: 'Akamai DASH',
+      description: 'Public Envivio DASH manifest — Android ExoPlayer.',
+    ),
+    SampleClip(
+      id: 'dash_bbb',
+      title: 'Big Buck Bunny DASH',
+      url: dashBbb,
+      format: 'dash',
+      source: 'Akamai DASH',
+      description: 'BBB 30fps multi-bitrate DASH — Android only.',
+    ),
+    SampleClip(
+      id: 'dash_unified_tears',
+      title: 'Tears of Steel (DASH)',
+      url: dashUnifiedTears,
+      format: 'dash',
+      source: 'Unified Streaming',
+      description: 'MPEG-DASH .mpd — Android only.',
+    ),
+  ];
+
+  static List<SampleClip> get allCatalog => [
+        ...mp4Samples,
+        ...hlsSamples,
+        ...movSamples,
+        ...m4vSamples,
+        ...webmSamples,
+        ...dashSamples,
+      ];
+
+  /// Filters shown on the home list for the current platform.
+  static List<MockFormatFilter> get availableFilters {
+    final list = <MockFormatFilter>[
+      MockFormatFilter.mp4,
+      MockFormatFilter.hls,
+      MockFormatFilter.mov,
+      MockFormatFilter.m4v,
+    ];
+    if (MediaFormat.isKindSupportedOnCurrentPlatform('webm')) {
+      list.add(MockFormatFilter.webm);
+    }
+    if (MediaFormat.isKindSupportedOnCurrentPlatform('dash')) {
+      list.add(MockFormatFilter.dash);
+    }
+    list.add(MockFormatFilter.all);
+    return list;
+  }
+
+  static List<SampleClip> clipsFor(MockFormatFilter filter) {
+    final raw = switch (filter) {
+      MockFormatFilter.mp4 => mp4Samples,
+      MockFormatFilter.hls => hlsSamples,
+      MockFormatFilter.webm => webmSamples,
+      MockFormatFilter.mov => movSamples,
+      MockFormatFilter.m4v => m4vSamples,
+      MockFormatFilter.dash => dashSamples,
+      MockFormatFilter.all => allCatalog,
+    };
+    return [
+      for (final c in raw)
+        if (c.isSupportedHere) c,
+    ];
+  }
+
+  static String platformHint() {
+    if (kIsWeb) {
+      return 'Web: MP4 / HLS / WebM. DASH is not available via video_player.';
+    }
+    switch (defaultTargetPlatform) {
+      case TargetPlatform.iOS:
+      case TargetPlatform.macOS:
+        return 'iOS/macOS (AVPlayer): MP4 / HLS / MOV / M4V. '
+            'WebM / DASH need Android.';
+      case TargetPlatform.android:
+        return 'Android (ExoPlayer): MP4 / HLS / MOV / M4V / WebM / DASH.';
+      default:
+        return 'Supported formats depend on the platform media engine.';
+    }
+  }
 }
 
 FeedItem _clipToFeedItem(SampleClip clip, int index) {
-  final assetType = clip.isHls ? 'hls' : 'mp4';
+  final assetType = clip.format;
   return FeedItem(
     id: '${clip.id}_$index',
     seriesId: 'demo_${clip.format}',
@@ -187,21 +374,10 @@ FeedItem _clipToFeedItem(SampleClip clip, int index) {
   );
 }
 
-/// Format filter for feed / episode mock loaders.
-enum MockFormatFilter { all, mp4, hls }
-
 /// Mock recommendation feed pages.
 class MockFeedData {
-  static List<SampleClip> clipsFor(MockFormatFilter filter) {
-    switch (filter) {
-      case MockFormatFilter.mp4:
-        return MockVideos.mp4Samples;
-      case MockFormatFilter.hls:
-        return MockVideos.hlsSamples;
-      case MockFormatFilter.all:
-        return MockVideos.allSamples;
-    }
-  }
+  static List<SampleClip> clipsFor(MockFormatFilter filter) =>
+      MockVideos.clipsFor(filter);
 
   static Future<List<FeedItem>> loadPage(
     int page, {
@@ -210,7 +386,7 @@ class MockFeedData {
   }) async {
     await Future<void>.delayed(const Duration(milliseconds: 280));
     final clips = clipsFor(filter);
-  // Repeat short catalogs so swipe + pagination demos stay interesting.
+    if (clips.isEmpty) return const [];
     final expanded = <SampleClip>[
       for (var r = 0; r < 4; r++) ...clips,
     ];
@@ -253,7 +429,7 @@ class MockSeriesData {
           playUrl: expanded[i].url,
           assets: [
             EpisodeAsset(
-              assetType: expanded[i].isHls ? 'hls' : 'mp4',
+              assetType: expanded[i].format,
               quality: '720p',
               url: expanded[i].url,
             ),
@@ -263,22 +439,26 @@ class MockSeriesData {
   }
 
   static SeriesInfo _meta(MockFormatFilter filter) {
+    final label = switch (filter) {
+      MockFormatFilter.mp4 => 'MP4',
+      MockFormatFilter.hls => 'HLS',
+      MockFormatFilter.webm => 'WebM',
+      MockFormatFilter.mov => 'MOV',
+      MockFormatFilter.m4v => 'M4V',
+      MockFormatFilter.dash => 'DASH',
+      MockFormatFilter.all => 'Mixed',
+    };
     return SeriesInfo(
       seriesId: 'mock_ocean_${filter.name}',
-      title: switch (filter) {
-        MockFormatFilter.mp4 => 'Ocean Notes (MP4)',
-        MockFormatFilter.hls => 'Ocean Notes (HLS)',
-        MockFormatFilter.all => 'Ocean Notes (Mixed)',
-      },
+      title: 'Ocean Notes ($label)',
       coverUrl: MockVideos.covers.last,
       description:
-          'Mock series using free public sample streams. '
+          'Mock series using free public / bundled sample streams. '
           'Swipe vertically between episodes. Pull down to refresh, '
           'pull up on the last episode to load more.',
     );
   }
 
-  /// Full series (all pages). Prefer [loadOceanSeriesPage] for pagination demos.
   static Future<SeriesInfo> loadOceanSeries({
     MockFormatFilter filter = MockFormatFilter.all,
   }) async {
@@ -295,7 +475,6 @@ class MockSeriesData {
     );
   }
 
-  /// Paginated series loader — page starts at 1.
   static Future<SeriesInfo> loadOceanSeriesPage(
     int page, {
     int pageSize = 4,

@@ -11,12 +11,46 @@ import 'playback_audio.dart';
 class PlayerFactory {
   PlayerFactory._();
 
-  static const String _mobileUserAgent =
-      'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) '
-      'AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148';
+  /// Flutter asset scheme used by demos: `asset://assets/videos/foo.mov`
+  static const String assetScheme = 'asset://';
 
-  static bool isHlsUrl(String url) =>
-      url.toLowerCase().contains('.m3u8');
+  static bool isHlsUrl(String url) => MediaFormat.isHls(url: url);
+
+  static bool isDashUrl(String url) => MediaFormat.isDash(url: url);
+
+  static bool isAssetUrl(String url) {
+    final u = url.trim();
+    return u.startsWith(assetScheme) || u.startsWith('assets/');
+  }
+
+  static String assetPathFromUrl(String url) {
+    final u = url.trim();
+    if (u.startsWith(assetScheme)) {
+      return u.substring(assetScheme.length);
+    }
+    return u;
+  }
+
+  static bool isFileUrl(String url) {
+    final u = url.trim().toLowerCase();
+    return u.startsWith('file:');
+  }
+
+  /// Maps URL / extension to [VideoFormat] hint for [VideoPlayerController].
+  ///
+  /// DASH / Smooth Streaming hints are only useful on Android (ExoPlayer).
+  static VideoFormat formatHintForUrl(String url) {
+    final kind = MediaFormat.normalize(null, url);
+    final apple = !kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.iOS ||
+            defaultTargetPlatform == TargetPlatform.macOS);
+    return switch (kind) {
+      'hls' => VideoFormat.hls,
+      'dash' => (kIsWeb || apple) ? VideoFormat.other : VideoFormat.dash,
+      'ss' => (kIsWeb || apple) ? VideoFormat.other : VideoFormat.ss,
+      _ => VideoFormat.other,
+    };
+  }
 
   static bool isOfflineVideoError(Object error) {
     final text = error.toString().toLowerCase();
@@ -53,10 +87,67 @@ class PlayerFactory {
     required bool isHls,
   }) {
     if (isHls) return const <String, String>{};
-    return <String, String>{
-      'User-Agent': _mobileUserAgent,
-      'Accept': '*/*',
-    };
+    // Empty headers: some CDNs mishandle custom UA + Range together.
+    // Host apps can still inject via [HttpHeadersProvider].
+    return const <String, String>{};
+  }
+
+  /// Creates a controller for network / asset / file URLs.
+  static VideoPlayerController create(
+    String url, {
+    required bool allowBackgroundPlayback,
+    bool mixWithOthers = false,
+    bool bustAssetCache = false,
+    HttpHeadersProvider? headersProvider,
+    UrlTransformer? urlTransformer,
+    VideoViewType viewType = VideoViewType.textureView,
+  }) {
+    final trimmed = (urlTransformer?.call(url.trim()) ?? url).trim();
+    if (isAssetUrl(trimmed)) {
+      return asset(
+        assetPathFromUrl(trimmed),
+        allowBackgroundPlayback: allowBackgroundPlayback,
+        mixWithOthers: mixWithOthers,
+        viewType: viewType,
+      );
+    }
+    if (!kIsWeb && isFileUrl(trimmed)) {
+      return localFile(
+        File(Uri.parse(trimmed).toFilePath()),
+        allowBackgroundPlayback: allowBackgroundPlayback,
+        mixWithOthers: mixWithOthers,
+        viewType: viewType,
+      );
+    }
+    return network(
+      trimmed,
+      allowBackgroundPlayback: allowBackgroundPlayback,
+      mixWithOthers: mixWithOthers,
+      bustAssetCache: bustAssetCache,
+      headersProvider: headersProvider,
+      urlTransformer: null, // already applied
+      viewType: viewType,
+    );
+  }
+
+  static VideoPlayerController asset(
+    String assetPath, {
+    required bool allowBackgroundPlayback,
+    bool mixWithOthers = false,
+    VideoViewType viewType = VideoViewType.textureView,
+    String? package,
+  }) {
+    return PlaybackAudio.track(
+      VideoPlayerController.asset(
+        assetPath,
+        package: package,
+        viewType: viewType,
+        videoPlayerOptions: VideoPlayerOptions(
+          mixWithOthers: mixWithOthers,
+          allowBackgroundPlayback: allowBackgroundPlayback,
+        ),
+      ),
+    );
   }
 
   static VideoPlayerController network(
@@ -81,7 +172,7 @@ class PlayerFactory {
     return PlaybackAudio.track(
       VideoPlayerController.networkUrl(
         Uri.parse(trimmed),
-        formatHint: hls ? VideoFormat.hls : VideoFormat.other,
+        formatHint: formatHintForUrl(trimmed),
         httpHeaders: headers,
         viewType: viewType,
         videoPlayerOptions: VideoPlayerOptions(

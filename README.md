@@ -23,9 +23,22 @@ Swipe feed, pull-to-refresh, and load-more in the example app:
 - Exclusive unmute (one audible player at a time)
 - Tap play/pause, long-press 2×, seek bar, speed sheet (episode)
 - Pull-to-refresh on first page / pull-up load-more on last page
+- Multi-format playback: MP4 / HLS / MOV / M4V / WebM / DASH (platform-dependent)
+- Network, Flutter asset (`asset://…`), and local `file:` URLs via `PlayerFactory.create`
 - Optional `HttpHeadersProvider` / `UrlTransformer` for CDN auth
 
 Player core and UI components are separated: keep the view, swap chrome via `overlayBuilder`.
+
+### Format support (via `video_player`)
+
+| Format | Android (ExoPlayer) | iOS / macOS (AVPlayer) | Web |
+|--------|---------------------|------------------------|-----|
+| MP4 / MOV / M4V | ✅ | ✅ | ✅* |
+| HLS (`.m3u8`) | ✅ | ✅ | ✅* |
+| WebM | ✅ | ❌ | ✅* |
+| DASH (`.mpd`) / SS | ✅ | ❌ | ❌ |
+
+\* Browser codec support still applies. Use `MediaFormat.isSupportedOnCurrentPlatform` / `unsupportedReason` to gate UI.
 
 ---
 
@@ -52,14 +65,14 @@ FeedPlayerController / EpisodePlayerController   (loader 分页)
 
 ```yaml
 dependencies:
-  flutter_feed_player: ^0.1.1
+  flutter_feed_player: ^0.1.2
 ```
 
 ```sh
 flutter pub get
 ```
 
-平台要求与 [`video_player`](https://pub.dev/packages/video_player) 一致（iOS / Android / Web 等）。确保目标平台已按该插件文档完成配置（如 Android 网络权限、iOS ATS）。
+要求 Flutter `>=3.27.0`，与 [`video_player`](https://pub.dev/packages/video_player) `^2.10.0` 一致。确保目标平台已按该插件文档完成配置（如 Android 网络权限、iOS ATS）。网络渐进式媒体需支持 **HTTP Range**（尤其 AVPlayer）。
 
 ### 2. 映射播放数据
 
@@ -69,10 +82,19 @@ flutter pub get
 |------|------|
 | `FeedItem` | 推荐流单卡（标题、点赞、内嵌 `EpisodeItem` 等） |
 | `EpisodeItem` | 单集；用 `playUrl` 或 `assets[].url` |
-| `EpisodeAsset` | 多清晰度 / 多 locale CDN 资源 |
+| `EpisodeAsset` | 多清晰度 / 多 locale / 多格式资源 |
 | `SeriesInfo` | 剧集元数据 + `episodes` 列表 |
+| `MediaFormat` | 从 URL / `assetType` 推断格式、徽章文案、平台是否可播 |
 
 播放地址解析：`playUrl` 优先；为空则取 `assets` 中第一个非空 `url`。含 `/v{n}/index.m3u8` 的 HLS 地址会在工厂层尽量归一到 `master.m3u8`。
+
+支持的 URL 形态：
+
+| 形态 | 示例 |
+|------|------|
+| 网络 | `https://cdn.example.com/a.mp4` / `.m3u8` / `.mpd` |
+| Flutter asset | `asset://assets/videos/clip.webm`（或直接 `assets/...`） |
+| 本地文件 | `file:///…`（非 Web） |
 
 ```dart
 import 'package:flutter_feed_player/flutter_feed_player.dart';
@@ -91,7 +113,7 @@ FeedItem mapFeedDto(YourFeedDto dto) {
     episode: EpisodeItem(
       episodeId: dto.episodeId,
       episodeNo: dto.episodeNo,
-      playUrl: dto.streamUrl, // MP4 或 .m3u8
+      playUrl: dto.streamUrl, // MP4 / HLS / MOV / … 或 asset://…
       // 或：assets: [EpisodeAsset(assetType: 'hls', url: dto.hlsUrl)],
     ),
   );
@@ -116,6 +138,8 @@ SeriesInfo mapSeriesDto(YourSeriesDto dto, List<YourEpDto> page) {
   );
 }
 ```
+
+`EpisodeItem` / `FeedItem` 暴露 `isHls`、`isDash`、`formatLabel`（如 `HLS` / `DASH` / `WebM` / `MOV` / `MP4`），chrome 可直接用作格式徽章。
 
 ### 3. 推荐流（Feed）接入
 
@@ -309,7 +333,7 @@ FeedPlayerController(
 );
 ```
 
-`EpisodePlayerController` 参数相同。
+`EpisodePlayerController` 参数相同。默认不再注入自定义 User-Agent（部分 CDN 会与 Range 请求冲突）；需要时通过 `headersProvider` 自行添加。
 
 ### 7. 生命周期与其它约定
 
@@ -318,11 +342,13 @@ FeedPlayerController(
 - Demo 在 `main` 里调用了 `PlaybackMemory.init()`（记忆进度）；宿主按需同样初始化。
 - `FeedItem.identity` / `episodeId` 尽量稳定唯一，便于 park 缓存命中。
 - 从 Feed 进剧集：在 `onWatchFullSeries` 里 `Navigator.push` 打开带同一 `seriesId` 的 `EpisodePlayer`。
+- WebM / DASH 在 iOS/macOS 不可播；可用 `MediaFormat` 过滤列表或展示 `unsupportedReason`。
 
 ### 8. 接入检查清单
 
 - [ ] `pubspec` 依赖 `flutter_feed_player`
 - [ ] DTO → `FeedItem` / `SeriesInfo` / `EpisodeItem`，且 `playUrl` 或 `assets` 可播
+- [ ] 目标平台支持该格式（见上方矩阵）；网络流支持 HTTP Range
 - [ ] `loader` 分页从 1 开始；耗尽返回空列表；`pageSize` 与接口一致
 - [ ] 剧集第 1 页带系列元数据
 - [ ] `Controller` 在 `dispose` 中释放
@@ -367,15 +393,15 @@ cd example
 flutter run
 ```
 
-The example ships feed / episode demos with public sample streams (MP4 + HLS). Demo pages compose chrome via `overlayBuilder`.
+Example home lists format filters available on the **current platform** (MP4 / HLS / MOV / M4V; plus WebM / DASH where supported). Samples include public network streams and a bundled WebM under `asset://assets/videos/…`. Demo pages compose chrome via `overlayBuilder`.
 
 ## Models
 
 ```dart
-FeedItem / EpisodeItem / EpisodeAsset / SeriesInfo
+FeedItem / EpisodeItem / EpisodeAsset / SeriesInfo / MediaFormat
 ```
 
-Provide `playUrl` and/or `assets[].url`. HLS URLs containing `/v{n}/index.m3u8` are normalized to `master.m3u8` when applicable.
+Provide `playUrl` and/or `assets[].url`. HLS URLs containing `/v{n}/index.m3u8` are normalized to `master.m3u8` when applicable. `formatLabel` / `isHls` / `isDash` come from `MediaFormat`.
 
 ## Public chrome building blocks
 

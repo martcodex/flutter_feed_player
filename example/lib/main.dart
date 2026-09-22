@@ -69,10 +69,12 @@ class DemoHomePage extends StatefulWidget {
 
 class _DemoHomePageState extends State<DemoHomePage> {
   PlayerDemoParams _params = const PlayerDemoParams();
+  MockFormatFilter _selected = MockFormatFilter.mp4;
 
   @override
   Widget build(BuildContext context) {
     final l10n = DemoLocaleScope.l10nOf(context);
+    final selectedCount = MockVideos.clipsFor(_selected).length;
     return Scaffold(
       body: SafeArea(
         child: ListView(
@@ -98,6 +100,14 @@ class _DemoHomePageState extends State<DemoHomePage> {
             ),
             const SizedBox(height: 28),
             Text(
+              l10n.selectVideoType,
+              style: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
               l10n.introHint,
               style: TextStyle(
                 color: Colors.white.withValues(alpha: 0.45),
@@ -105,37 +115,39 @@ class _DemoHomePageState extends State<DemoHomePage> {
                 fontSize: 13,
               ),
             ),
-            const SizedBox(height: 16),
-            _FormatGroupCard(
-              title: 'MP4',
-              subtitle: l10n.mp4Subtitle(MockVideos.mp4Samples.length),
-              color: const Color(0xFF38BDF8),
-              playFeedLabel: l10n.playFeed,
-              playEpisodesLabel: l10n.playEpisodes,
-              onPlayFeed: () => _openFeed(MockFormatFilter.mp4),
-              onPlayEpisodes: () => _openEpisodes(MockFormatFilter.mp4),
+            const SizedBox(height: 14),
+            _VideoTypeList(
+              selected: _selected,
+              onSelected: (f) => setState(() => _selected = f),
             ),
-            const SizedBox(height: 16),
-            _FormatGroupCard(
-              title: 'M3U8 / HLS',
-              subtitle: l10n.hlsSubtitle(MockVideos.hlsSamples.length),
-              color: const Color(0xFF34D399),
-              playFeedLabel: l10n.playFeed,
-              playEpisodesLabel: l10n.playEpisodes,
-              onPlayFeed: () => _openFeed(MockFormatFilter.hls),
-              onPlayEpisodes: () => _openEpisodes(MockFormatFilter.hls),
+            const SizedBox(height: 18),
+            Text(
+              l10n.selectedTypeHint(
+                l10n.videoTypeTitle(_selected),
+                selectedCount,
+              ),
+              style: TextStyle(
+                fontSize: 13,
+                color: Colors.white.withValues(alpha: 0.55),
+              ),
             ),
-            const SizedBox(height: 24),
-            OutlinedButton.icon(
-              onPressed: () => _openFeed(MockFormatFilter.all),
-              icon: const Icon(Icons.swipe_vertical),
-              label: Text(l10n.mixedFeed),
-            ),
-            const SizedBox(height: 10),
-            OutlinedButton.icon(
-              onPressed: () => _openEpisodes(MockFormatFilter.all),
-              icon: const Icon(Icons.play_circle_outline),
-              label: Text(l10n.mixedEpisodes),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: FilledButton.tonal(
+                    onPressed: () => _openFeed(_selected),
+                    child: Text(l10n.playFeed),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: FilledButton.tonal(
+                    onPressed: () => _openEpisodes(_selected),
+                    child: Text(l10n.playEpisodes),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 24),
             PlayerParamPanel(
@@ -173,6 +185,161 @@ class _DemoHomePageState extends State<DemoHomePage> {
         builder: (_) => EpisodeDemoPage(
           formatFilter: filter,
           params: _params,
+        ),
+      ),
+    );
+  }
+}
+
+class _VideoTypeList extends StatelessWidget {
+  const _VideoTypeList({
+    required this.selected,
+    required this.onSelected,
+  });
+
+  final MockFormatFilter selected;
+  final ValueChanged<MockFormatFilter> onSelected;
+
+  static Color _color(MockFormatFilter f) => switch (f) {
+        MockFormatFilter.mp4 => const Color(0xFF38BDF8),
+        MockFormatFilter.hls => const Color(0xFF34D399),
+        MockFormatFilter.webm => const Color(0xFFFBBF24),
+        MockFormatFilter.mov => const Color(0xFFF472B6),
+        MockFormatFilter.m4v => const Color(0xFFA78BFA),
+        MockFormatFilter.dash => const Color(0xFFFB923C),
+        MockFormatFilter.all => const Color(0xFFE2E8F0),
+      };
+
+  static IconData _icon(MockFormatFilter f) => switch (f) {
+        MockFormatFilter.mp4 => Icons.movie_outlined,
+        MockFormatFilter.hls => Icons.playlist_play,
+        MockFormatFilter.webm => Icons.web_asset,
+        MockFormatFilter.mov => Icons.videocam_outlined,
+        MockFormatFilter.m4v => Icons.video_file_outlined,
+        MockFormatFilter.dash => Icons.stream,
+        MockFormatFilter.all => Icons.library_books_outlined,
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = DemoLocaleScope.l10nOf(context);
+    final order = MockVideos.availableFilters;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          MockVideos.platformHint(),
+          style: TextStyle(
+            fontSize: 12,
+            height: 1.35,
+            color: Colors.white.withValues(alpha: 0.4),
+          ),
+        ),
+        const SizedBox(height: 10),
+        Container(
+          decoration: BoxDecoration(
+            color: const Color(0xFF17171C),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+          ),
+          child: Column(
+            children: [
+              for (var i = 0; i < order.length; i++) ...[
+                if (i > 0)
+                  Divider(
+                    height: 1,
+                    color: Colors.white.withValues(alpha: 0.06),
+                  ),
+                _VideoTypeTile(
+                  title: l10n.videoTypeTitle(order[i]),
+                  subtitle: l10n.videoTypeSubtitle(
+                    order[i],
+                    MockVideos.clipsFor(order[i]).length,
+                  ),
+                  color: _color(order[i]),
+                  icon: _icon(order[i]),
+                  selected: selected == order[i],
+                  onTap: () => onSelected(order[i]),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _VideoTypeTile extends StatelessWidget {
+  const _VideoTypeTile({
+    required this.title,
+    required this.subtitle,
+    required this.color,
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String title;
+  final String subtitle;
+  final Color color;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: selected ? color.withValues(alpha: 0.12) : Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: selected ? 0.28 : 0.14),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, size: 18, color: color),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: selected ? color : Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.white.withValues(alpha: 0.45),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                selected
+                    ? Icons.radio_button_checked
+                    : Icons.radio_button_off,
+                size: 20,
+                color: selected
+                    ? color
+                    : Colors.white.withValues(alpha: 0.35),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -238,91 +405,6 @@ class _LanguageSwitcher extends StatelessWidget {
           showSelectedIcon: false,
         ),
       ],
-    );
-  }
-}
-
-class _FormatGroupCard extends StatelessWidget {
-  const _FormatGroupCard({
-    required this.title,
-    required this.subtitle,
-    required this.color,
-    required this.playFeedLabel,
-    required this.playEpisodesLabel,
-    required this.onPlayFeed,
-    required this.onPlayEpisodes,
-  });
-
-  final String title;
-  final String subtitle;
-  final Color color;
-  final String playFeedLabel;
-  final String playEpisodesLabel;
-  final VoidCallback onPlayFeed;
-  final VoidCallback onPlayEpisodes;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: const Color(0xFF17171C),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: color.withValues(alpha: 0.35)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  title,
-                  style: TextStyle(
-                    color: color,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 0.4,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  subtitle,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.white.withValues(alpha: 0.45),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: FilledButton.tonal(
-                  onPressed: onPlayFeed,
-                  child: Text(playFeedLabel),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: FilledButton.tonal(
-                  onPressed: onPlayEpisodes,
-                  child: Text(playEpisodesLabel),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
     );
   }
 }

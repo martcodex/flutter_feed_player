@@ -270,7 +270,7 @@ class EpisodePlayerController extends ChangeNotifier {
 
     _armColdStartWatchdog(seq);
 
-    final ctrl = PlayerFactory.network(
+    final ctrl = PlayerFactory.create(
       url,
       allowBackgroundPlayback: allowBackgroundPlayback,
       headersProvider: headersProvider,
@@ -533,7 +533,7 @@ class EpisodePlayerController extends ChangeNotifier {
         );
         if (url.isEmpty) continue;
 
-        final ctrl = PlayerFactory.network(
+        final ctrl = PlayerFactory.create(
           url,
           allowBackgroundPlayback: allowBackgroundPlayback,
           headersProvider: headersProvider,

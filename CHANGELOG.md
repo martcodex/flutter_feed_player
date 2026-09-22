@@ -1,3 +1,16 @@
+## Unreleased
+
+* Add `MediaFormat` for URL / `assetType` detection, chrome badges, and
+  platform support checks (`isSupportedOnCurrentPlatform`, `unsupportedReason`).
+* Expand format labels beyond HLS/MP4: WebM, MOV, M4V, DASH (and SS).
+* `PlayerFactory.create` plays network, Flutter asset (`asset://…` / `assets/…`),
+  and local `file:` URLs; adds `formatHintForUrl` for HLS / DASH / SS.
+* Models expose `isDash` alongside `isHls` / `formatLabel`.
+* Stop injecting a default custom User-Agent (avoids CDN + Range conflicts);
+  hosts can still set headers via `HttpHeadersProvider`.
+* Example: multi-format showcase (MP4 / HLS / MOV / M4V / WebM / DASH) with
+  platform-aware filters and bundled `assets/videos/` samples.
+
 ## 0.1.2
 
 * Raise `video_player` lower bound to `^2.10.0` (requires `VideoViewType`).

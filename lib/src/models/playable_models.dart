@@ -1,6 +1,108 @@
 // Shared playable models for feed and episode players.
 // Host apps map their own DTOs into these types. No network client is included.
 
+import 'package:flutter/foundation.dart';
+
+/// Detects common stream / file formats from URL extension or asset type.
+class MediaFormat {
+  MediaFormat._();
+
+  static String normalize(String? assetType, String url) {
+    final type = (assetType ?? '').trim().toLowerCase();
+    if (type == 'hls' || type == 'm3u8') return 'hls';
+    if (type == 'dash' || type == 'mpd') return 'dash';
+    if (type == 'webm' ||
+        type == 'mov' ||
+        type == 'm4v' ||
+        type == 'mp4' ||
+        type == 'ss') {
+      return type;
+    }
+    final lower = url.toLowerCase();
+    if (lower.contains('.m3u8')) return 'hls';
+    if (lower.contains('.mpd')) return 'dash';
+    if (lower.contains('.webm')) return 'webm';
+    if (lower.contains('.mov')) return 'mov';
+    if (lower.contains('.m4v')) return 'm4v';
+    if (lower.contains('.mp4')) return 'mp4';
+    if (type.isNotEmpty) return type;
+    return 'other';
+  }
+
+  /// Short badge for chrome: `HLS`, `DASH`, `WebM`, `MOV`, `M4V`, `MP4`, …
+  static String labelFor({String? assetType, required String url}) {
+    return switch (normalize(assetType, url)) {
+      'hls' => 'HLS',
+      'dash' => 'DASH',
+      'webm' => 'WebM',
+      'mov' => 'MOV',
+      'm4v' => 'M4V',
+      'mp4' => 'MP4',
+      'ss' => 'SS',
+      'other' => 'Video',
+      final other => other.toUpperCase(),
+    };
+  }
+
+  static bool isHls({String? assetType, required String url}) =>
+      normalize(assetType, url) == 'hls';
+
+  static bool isDash({String? assetType, required String url}) =>
+      normalize(assetType, url) == 'dash';
+
+  static bool get _isAppleAvPlayer {
+    if (kIsWeb) return false;
+    return defaultTargetPlatform == TargetPlatform.iOS ||
+        defaultTargetPlatform == TargetPlatform.macOS;
+  }
+
+  /// Whether [video_player] can typically decode this format on the current OS.
+  ///
+  /// iOS / macOS use AVPlayer (no WebM / DASH). Android uses ExoPlayer.
+  /// Web depends on the browser; DASH is treated as unsupported there.
+  static bool isSupportedOnCurrentPlatform({
+    String? assetType,
+    required String url,
+  }) {
+    return isKindSupportedOnCurrentPlatform(normalize(assetType, url));
+  }
+
+  static bool isKindSupportedOnCurrentPlatform(String kind) {
+    switch (kind) {
+      case 'hls':
+      case 'mp4':
+      case 'mov':
+      case 'm4v':
+      case 'other':
+        return true;
+      case 'webm':
+        if (_isAppleAvPlayer) return false;
+        return true;
+      case 'dash':
+      case 'ss':
+        if (kIsWeb || _isAppleAvPlayer) return false;
+        return true;
+      default:
+        return true;
+    }
+  }
+
+  /// Human-readable reason when [isSupportedOnCurrentPlatform] is false.
+  static String unsupportedReason({
+    String? assetType,
+    required String url,
+  }) {
+    final label = labelFor(assetType: assetType, url: url);
+    if (kIsWeb) {
+      return '$label is not supported in this browser via video_player.';
+    }
+    if (_isAppleAvPlayer) {
+      return '$label is not supported on iOS/macOS (AVPlayer). Try Android.';
+    }
+    return '$label is not supported on this platform.';
+  }
+}
+
 /// A single CDN / file asset for an episode clip.
 class EpisodeAsset {
   final String assetType;
@@ -15,11 +117,11 @@ class EpisodeAsset {
     this.url = '',
   });
 
-  bool get isHls {
-    final t = assetType.toLowerCase();
-    if (t == 'hls') return true;
-    return url.toLowerCase().contains('.m3u8');
-  }
+  bool get isHls => MediaFormat.isHls(assetType: assetType, url: url);
+
+  bool get isDash => MediaFormat.isDash(assetType: assetType, url: url);
+
+  String get formatLabel => MediaFormat.labelFor(assetType: assetType, url: url);
 }
 
 /// One episode within a series (or a feed clip that points at a series).
@@ -59,16 +161,33 @@ class EpisodeItem {
 
   /// True when the resolved URL / assets look like HLS.
   bool get isHls {
-    final url = resolvedPlayUrl.toLowerCase();
-    if (url.contains('.m3u8')) return true;
+    if (MediaFormat.isHls(url: resolvedPlayUrl)) return true;
     for (final a in assets) {
       if (a.isHls) return true;
     }
     return false;
   }
 
-  /// Short format badge: `HLS` or `MP4`.
-  String get formatLabel => isHls ? 'HLS' : 'MP4';
+  /// True when the resolved URL / assets look like MPEG-DASH.
+  bool get isDash {
+    if (MediaFormat.isDash(url: resolvedPlayUrl)) return true;
+    for (final a in assets) {
+      if (a.isDash) return true;
+    }
+    return false;
+  }
+
+  /// Short format badge: `HLS`, `DASH`, `WebM`, `MOV`, `MP4`, …
+  String get formatLabel {
+    final url = resolvedPlayUrl;
+    if (url.isNotEmpty) {
+      return MediaFormat.labelFor(url: url);
+    }
+    for (final a in assets) {
+      if (a.url.trim().isNotEmpty) return a.formatLabel;
+    }
+    return 'Video';
+  }
 
   String get displayLabel {
     final label = episodeLabel.trim();
@@ -161,6 +280,8 @@ class FeedItem {
 
   bool get isHls => episode.isHls;
 
+  bool get isDash => episode.isDash;
+
   String get formatLabel => episode.formatLabel;
 
   FeedItem copyWith({
@@ -190,7 +311,7 @@ class FeedItem {
   }
 }
 
-/// Optional HTTP headers / URL rewrite hooks for CDN auth.
+/// Optional hooks for authenticated / regional CDNs.
 typedef HttpHeadersProvider = Map<String, String> Function({
   required String url,
   required bool isHls,

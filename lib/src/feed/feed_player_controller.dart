@@ -296,7 +296,7 @@ class FeedPlayerController extends ChangeNotifier {
   }
 
   Future<VideoPlayerController?> _createAndInit(String url, String key) async {
-    final ctrl = PlayerFactory.network(
+    final ctrl = PlayerFactory.create(
       url,
       allowBackgroundPlayback: allowBackgroundPlayback,
       headersProvider: headersProvider,
