@@ -204,45 +204,117 @@ class DemoL10n {
         DemoLang.ja => 'フィード / エピソード開始時に適用',
       };
 
+  String get paramGroupInteraction => switch (lang) {
+        DemoLang.zh => '交互与界面',
+        DemoLang.en => 'Interaction & UI',
+        DemoLang.ja => '操作と表示',
+      };
+
+  String get paramGroupFeed => switch (lang) {
+        DemoLang.zh => '推荐流',
+        DemoLang.en => 'Feed',
+        DemoLang.ja => 'フィード',
+      };
+
+  String get paramGroupPlayback => switch (lang) {
+        DemoLang.zh => '播放行为',
+        DemoLang.en => 'Playback',
+        DemoLang.ja => '再生動作',
+      };
+
   String get paramGestures => switch (lang) {
-        DemoLang.zh => '手势',
+        DemoLang.zh => '手势控制',
         DemoLang.en => 'Gestures',
         DemoLang.ja => 'ジェスチャー',
       };
 
+  String get paramGesturesHint => switch (lang) {
+        DemoLang.zh => '双击暂停、左右调节音量亮度等',
+        DemoLang.en => 'Double-tap, volume / brightness, etc.',
+        DemoLang.ja => 'ダブルタップ・音量/明るさなど',
+      };
+
   String get paramBuffering => switch (lang) {
-        DemoLang.zh => '缓冲圈',
-        DemoLang.en => 'Buffering',
+        DemoLang.zh => '缓冲指示',
+        DemoLang.en => 'Buffering indicator',
         DemoLang.ja => 'バッファ表示',
+      };
+
+  String get paramBufferingHint => switch (lang) {
+        DemoLang.zh => '加载时显示转圈',
+        DemoLang.en => 'Show spinner while loading',
+        DemoLang.ja => '読み込み中にスピナー表示',
       };
 
   String get paramPullRefresh => switch (lang) {
         DemoLang.zh => '下拉刷新',
-        DemoLang.en => 'Pull refresh',
+        DemoLang.en => 'Pull to refresh',
         DemoLang.ja => '引いて更新',
       };
 
+  String get paramPullRefreshHint => switch (lang) {
+        DemoLang.zh => '列表顶部下拉重新加载',
+        DemoLang.en => 'Reload from the top of the list',
+        DemoLang.ja => 'リスト先頭で引き下げて再読込',
+      };
+
   String get paramPullMore => switch (lang) {
-        DemoLang.zh => '上拉更多',
-        DemoLang.en => 'Pull more',
-        DemoLang.ja => '引いて追加',
+        DemoLang.zh => '上拉加载更多',
+        DemoLang.en => 'Pull to load more',
+        DemoLang.ja => '引いて追加読み込み',
+      };
+
+  String get paramPullMoreHint => switch (lang) {
+        DemoLang.zh => '列表底部上拉追加内容',
+        DemoLang.en => 'Load more from the bottom',
+        DemoLang.ja => 'リスト末尾で追加読み込み',
       };
 
   String get paramLockForward => switch (lang) {
-        DemoLang.zh => '冷启锁滑',
-        DemoLang.en => 'Lock swipe',
-        DemoLang.ja => '起動時ロック',
+        DemoLang.zh => '冷启动锁定上滑',
+        DemoLang.en => 'Lock forward while cold',
+        DemoLang.ja => '起動直後の前方ロック',
+      };
+
+  String get paramLockForwardHint => switch (lang) {
+        DemoLang.zh => '首条未就绪前禁止滑到下一条',
+        DemoLang.en => 'Block swipe to next until ready',
+        DemoLang.ja => '準備完了まで次へスワイプ不可',
       };
 
   String get paramLoopFeed => switch (lang) {
-        DemoLang.zh => '循环(Feed)',
-        DemoLang.en => 'Loop (Feed)',
-        DemoLang.ja => 'ループ(Feed)',
+        DemoLang.zh => '单条循环（Feed）',
+        DemoLang.en => 'Loop clip (Feed)',
+        DemoLang.ja => 'クリップループ（Feed）',
+      };
+
+  String get paramLoopFeedHint => switch (lang) {
+        DemoLang.zh => '与「自动下一集」互斥',
+        DemoLang.en => 'Mutually exclusive with auto next',
+        DemoLang.ja => '「自動次へ」と排他',
+      };
+
+  String get paramAutoAdvance => switch (lang) {
+        DemoLang.zh => '播完自动下一集',
+        DemoLang.en => 'Auto advance on end',
+        DemoLang.ja => '終了後に自動で次へ',
+      };
+
+  String get paramAutoAdvanceHint => switch (lang) {
+        DemoLang.zh => '与「单条循环」互斥',
+        DemoLang.en => 'Mutually exclusive with loop',
+        DemoLang.ja => '「ループ」と排他',
       };
 
   String get shareMock => switch (lang) {
         DemoLang.zh => '分享（模拟）',
         DemoLang.en => 'Share (mock)',
         DemoLang.ja => '共有（モック）',
+      };
+
+  String get moreMock => switch (lang) {
+        DemoLang.zh => '更多（模拟）',
+        DemoLang.en => 'More (mock)',
+        DemoLang.ja => 'その他（モック）',
       };
 }

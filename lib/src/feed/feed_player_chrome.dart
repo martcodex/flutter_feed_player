@@ -10,12 +10,13 @@ import 'feed_player_view.dart';
 /// ```dart
 /// overlayBuilder: (context, slot) => FeedPlayerChrome(slot: slot, ...)
 /// ```
-class FeedPlayerChrome extends StatelessWidget {
+class FeedPlayerChrome extends StatefulWidget {
   const FeedPlayerChrome({
     super.key,
     required this.slot,
     this.bottomInset = 0,
     this.onShare,
+    this.onMore,
     this.onWatchFullSeries,
     this.showCenterPlay = true,
     this.showSideActions = true,
@@ -25,43 +26,58 @@ class FeedPlayerChrome extends StatelessWidget {
   final FeedPlayerSlot slot;
   final double bottomInset;
   final ValueChanged<int>? onShare;
+  final ValueChanged<int>? onMore;
   final ValueChanged<int>? onWatchFullSeries;
   final bool showCenterPlay;
   final bool showSideActions;
   final bool showBottomChrome;
 
   @override
-  Widget build(BuildContext context) {
-    if (!slot.isActive) return const SizedBox.shrink();
+  State<FeedPlayerChrome> createState() => _FeedPlayerChromeState();
+}
 
+class _FeedPlayerChromeState extends State<FeedPlayerChrome> {
+  bool _scrubbing = false;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!widget.slot.isActive) return const SizedBox.shrink();
+
+    final slot = widget.slot;
     final c = slot.controller;
     final item = slot.item;
 
     return Stack(
       fit: StackFit.expand,
       children: [
-        if (showCenterPlay && c.showCenterPlay)
+        if (!_scrubbing && widget.showCenterPlay && c.showCenterPlay)
           const FeedCenterPlayIcon(),
-        if (showSideActions)
+        if (!_scrubbing && widget.showSideActions)
           FeedSideActions(
-            bottomInset: bottomInset,
+            bottomInset: widget.bottomInset,
             liked: item.isLiked,
             likeCount: item.likeCount,
             onLike: () => c.toggleLike(slot.index),
-            onShare: onShare == null ? null : () => onShare!(slot.index),
+            onShare: widget.onShare == null
+                ? null
+                : () => widget.onShare!(slot.index),
+            onMore: widget.onMore == null
+                ? null
+                : () => widget.onMore!(slot.index),
           ),
-        if (showBottomChrome)
+        if (widget.showBottomChrome)
           FeedBottomChrome(
-            bottomInset: bottomInset,
+            bottomInset: widget.bottomInset,
             title: item.title,
             description: item.description,
             tags: item.tags,
             ctaText: item.ctaText,
             formatLabel: item.formatLabel,
             seekController: slot.player,
-            onCta: onWatchFullSeries == null
+            onCta: widget.onWatchFullSeries == null
                 ? null
-                : () => onWatchFullSeries!(slot.index),
+                : () => widget.onWatchFullSeries!(slot.index),
+            onScrubbingChanged: (v) => setState(() => _scrubbing = v),
           ),
       ],
     );
@@ -89,7 +105,7 @@ class FeedCenterPlayIcon extends StatelessWidget {
   }
 }
 
-/// Right-side like / share column.
+/// Right-side like / share / more column.
 class FeedSideActions extends StatelessWidget {
   const FeedSideActions({
     super.key,
@@ -98,6 +114,7 @@ class FeedSideActions extends StatelessWidget {
     required this.likeCount,
     required this.onLike,
     this.onShare,
+    this.onMore,
   });
 
   final double bottomInset;
@@ -105,6 +122,7 @@ class FeedSideActions extends StatelessWidget {
   final int likeCount;
   final VoidCallback onLike;
   final VoidCallback? onShare;
+  final VoidCallback? onMore;
 
   @override
   Widget build(BuildContext context) {
@@ -124,6 +142,12 @@ class FeedSideActions extends StatelessWidget {
             icon: Icons.ios_share_rounded,
             label: 'Share',
             onTap: onShare,
+          ),
+          const SizedBox(height: 20),
+          FeedActionButton(
+            icon: Icons.more_horiz_rounded,
+            label: 'More',
+            onTap: onMore,
           ),
         ],
       ),
@@ -158,17 +182,10 @@ class FeedActionButton extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: Colors.black.withValues(alpha: 0.25),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, color: color, size: 26),
-          ),
-          const SizedBox(height: 4),
+          Icon(icon, color: color, size: 32),
+          const SizedBox(height: 2),
           Text(
             label,
             style: const TextStyle(color: Colors.white, fontSize: 12),
@@ -180,7 +197,9 @@ class FeedActionButton extends StatelessWidget {
 }
 
 /// Bottom title / tags / CTA / seek bar.
-class FeedBottomChrome extends StatelessWidget {
+///
+/// While scrubbing, meta / CTA are hidden so only the seek bar + time remain.
+class FeedBottomChrome extends StatefulWidget {
   const FeedBottomChrome({
     super.key,
     required this.bottomInset,
@@ -192,6 +211,7 @@ class FeedBottomChrome extends StatelessWidget {
     this.formatLabel,
     this.onCta,
     this.belowMeta,
+    this.onScrubbingChanged,
   });
 
   final double bottomInset;
@@ -205,12 +225,20 @@ class FeedBottomChrome extends StatelessWidget {
 
   /// Optional content rendered under the item meta (above the seek bar).
   final Widget? belowMeta;
+  final ValueChanged<bool>? onScrubbingChanged;
+
+  @override
+  State<FeedBottomChrome> createState() => _FeedBottomChromeState();
+}
+
+class _FeedBottomChromeState extends State<FeedBottomChrome> {
+  bool _scrubbing = false;
 
   @override
   Widget build(BuildContext context) {
-    final desc = description.length > 72
-        ? '${description.substring(0, 72)}…'
-        : description;
+    final desc = widget.description.length > 72
+        ? '${widget.description.substring(0, 72)}…'
+        : widget.description;
 
     // Full-bleed gradient mask; meta text clears side actions; seek is equal-inset.
     return Positioned(
@@ -218,112 +246,129 @@ class FeedBottomChrome extends StatelessWidget {
       right: 0,
       bottom: 0,
       child: Container(
-        padding: EdgeInsets.fromLTRB(16, 48, 16, 12 + bottomInset),
-        decoration: const BoxDecoration(
+        padding: EdgeInsets.fromLTRB(
+          16,
+          _scrubbing ? 16 : 48,
+          16,
+          12 + widget.bottomInset,
+        ),
+        decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [Colors.transparent, Colors.black87],
+            colors: [
+              Colors.transparent,
+              Colors.black87.withValues(alpha: _scrubbing ? 0.55 : 1),
+            ],
           ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            IgnorePointer(
-              child: Padding(
-                padding: const EdgeInsets.only(right: 56),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
+            if (!_scrubbing) ...[
+              IgnorePointer(
+                child: Padding(
+                  padding: const EdgeInsets.only(right: 56),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        widget.title,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
-                    ),
-                    if (formatLabel != null && formatLabel!.isNotEmpty) ...[
-                      const SizedBox(height: 6),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.18),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          formatLabel!,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
+                      if (widget.formatLabel != null &&
+                          widget.formatLabel!.isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.18),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            widget.formatLabel!,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
-                      ),
-                    ],
-                    if (tags.isNotEmpty) ...[
-                      const SizedBox(height: 6),
-                      Wrap(
-                        spacing: 6,
-                        children: tags
-                            .take(3)
-                            .map(
-                              (t) => Text(
-                                '#$t',
-                                style: const TextStyle(
-                                  color: Colors.white70,
-                                  fontSize: 12,
+                      ],
+                      if (widget.tags.isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Wrap(
+                          spacing: 6,
+                          children: widget.tags
+                              .take(3)
+                              .map(
+                                (t) => Text(
+                                  '#$t',
+                                  style: const TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 12,
+                                  ),
                                 ),
-                              ),
-                            )
-                            .toList(),
-                      ),
-                    ],
-                    if (desc.isNotEmpty) ...[
-                      const SizedBox(height: 6),
-                      Text(
-                        desc,
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 13,
+                              )
+                              .toList(),
                         ),
-                      ),
+                      ],
+                      if (desc.isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          desc,
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
                     ],
-                  ],
-                ),
-              ),
-            ),
-            if (ctaText.isNotEmpty) ...[
-              const SizedBox(height: 10),
-              TextButton(
-                style: TextButton.styleFrom(
-                  foregroundColor: Colors.black,
-                  backgroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 8,
                   ),
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
-                onPressed: onCta,
-                child: Text(ctaText),
               ),
+              if (widget.ctaText.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                TextButton(
+                  style: TextButton.styleFrom(
+                    foregroundColor: Colors.black,
+                    backgroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 8,
+                    ),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  onPressed: widget.onCta,
+                  child: Text(widget.ctaText),
+                ),
+              ],
+              if (widget.belowMeta != null) ...[
+                const SizedBox(height: 10),
+                Padding(
+                  padding: const EdgeInsets.only(right: 56),
+                  child: widget.belowMeta!,
+                ),
+              ],
+              const SizedBox(height: 8),
             ],
-            if (belowMeta != null) ...[
-              const SizedBox(height: 10),
-              Padding(
-                padding: const EdgeInsets.only(right: 56),
-                child: belowMeta!,
-              ),
-            ],
-            const SizedBox(height: 8),
-            PlayerSeekBar(controller: seekController),
+            PlayerSeekBar(
+              controller: widget.seekController,
+              onScrubbingChanged: (v) {
+                setState(() => _scrubbing = v);
+                widget.onScrubbingChanged?.call(v);
+              },
+            ),
           ],
         ),
       ),

@@ -14,6 +14,7 @@ class FeedPlayer extends StatelessWidget {
     required this.controller,
     this.onWatchFullSeries,
     this.onShare,
+    this.onMore,
     this.bottomInset = 0,
     this.overlayBuilder,
     this.loadingBuilder,
@@ -28,6 +29,7 @@ class FeedPlayer extends StatelessWidget {
   final FeedPlayerController controller;
   final ValueChanged<int>? onWatchFullSeries;
   final ValueChanged<int>? onShare;
+  final ValueChanged<int>? onMore;
   final double bottomInset;
 
   /// When set, replaces the default [FeedPlayerChrome] entirely.
@@ -57,6 +59,7 @@ class FeedPlayer extends StatelessWidget {
                 slot: slot,
                 bottomInset: bottomInset,
                 onShare: onShare,
+                onMore: onMore,
                 onWatchFullSeries: onWatchFullSeries,
               ),
     );

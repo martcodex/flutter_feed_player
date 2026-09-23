@@ -40,6 +40,7 @@ class _EpisodeDemoPageState extends State<EpisodeDemoPage> {
       pageSize: _pageSize,
       initialEpisodeNo: 1,
       lockForwardWhileCold: widget.params.lockForwardWhileCold,
+      autoAdvanceOnEnd: widget.params.autoAdvanceOnEnd,
     );
   }
 
@@ -75,7 +76,7 @@ class _EpisodeDemoPageState extends State<EpisodeDemoPage> {
   }
 }
 
-class _DemoEpisodeChrome extends StatelessWidget {
+class _DemoEpisodeChrome extends StatefulWidget {
   const _DemoEpisodeChrome({
     required this.slot,
     required this.onBack,
@@ -87,31 +88,39 @@ class _DemoEpisodeChrome extends StatelessWidget {
   final VoidCallback onShare;
 
   @override
-  Widget build(BuildContext context) {
-    if (!slot.isActive) return const SizedBox.shrink();
+  State<_DemoEpisodeChrome> createState() => _DemoEpisodeChromeState();
+}
 
-    final c = slot.controller;
-    final ep = slot.episode;
-    final series = slot.series;
+class _DemoEpisodeChromeState extends State<_DemoEpisodeChrome> {
+  bool _scrubbing = false;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!widget.slot.isActive) return const SizedBox.shrink();
+
+    final c = widget.slot.controller;
+    final ep = widget.slot.episode;
+    final series = widget.slot.series;
     final topPad = MediaQuery.paddingOf(context).top;
     final total = c.episodes.length;
     final pageLabel = total > 0
-        ? '${slot.index + 1}/$total${c.hasMore ? '+' : ''}'
+        ? '${widget.slot.index + 1}/$total${c.hasMore ? '+' : ''}'
         : '';
+    final showUi = c.showChrome && !_scrubbing;
 
     return Stack(
       fit: StackFit.expand,
       children: [
-        if (!c.showChrome && c.showCenterPlay)
+        if (!c.showChrome && !_scrubbing && c.showCenterPlay)
           EpisodeCenterControl(
             isPlaying: false,
             onPressed: c.togglePlayPause,
           ),
         AnimatedOpacity(
-          opacity: c.showChrome ? 1 : 0,
+          opacity: showUi ? 1 : 0,
           duration: const Duration(milliseconds: 180),
           child: IgnorePointer(
-            ignoring: !c.showChrome,
+            ignoring: !showUi,
             child: Stack(
               children: [
                 EpisodeCenterControl(
@@ -124,28 +133,29 @@ class _DemoEpisodeChrome extends StatelessWidget {
                       ? '${ep.displayLabel} · $pageLabel'
                       : ep.displayLabel,
                   speed: c.playbackSpeed,
-                  onBack: onBack,
+                  onBack: widget.onBack,
                   onSpeed: () => showEpisodeSpeedSheet(context, c),
                 ),
                 EpisodeSideActions(
                   onEpisodes: () => showEpisodeListSheet(context),
-                  onShare: onShare,
-                ),
-                EpisodeBottomChrome(
-                  title: series.title,
-                  episodeTitle:
-                      ep.title.isNotEmpty ? ep.title : ep.displayLabel,
-                  description: ep.description.isNotEmpty
-                      ? ep.description
-                      : series.description,
-                  seekController: slot.player,
-                  onSeekStart: c.revealChrome,
+                  onShare: widget.onShare,
                 ),
               ],
             ),
           ),
         ),
-        if (c.isBoosting) const EpisodeBoostBadge(),
+        if (c.showChrome || _scrubbing)
+          EpisodeBottomChrome(
+            title: series.title,
+            episodeTitle: ep.title.isNotEmpty ? ep.title : ep.displayLabel,
+            description: ep.description.isNotEmpty
+                ? ep.description
+                : series.description,
+            seekController: widget.slot.player,
+            onSeekStart: c.revealChrome,
+            onScrubbingChanged: (v) => setState(() => _scrubbing = v),
+          ),
+        if (c.isBoosting && !_scrubbing) const EpisodeBoostBadge(),
       ],
     );
   }

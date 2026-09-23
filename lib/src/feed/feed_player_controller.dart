@@ -24,6 +24,7 @@ class FeedPlayerController extends ChangeNotifier {
     /// When true, blocks swipe-to-next until the first frame is ready.
     /// Default false — HLS cold starts often keep this locked and feel stuck.
     this.lockForwardWhileCold = false,
+    this.autoAdvanceOnEnd = true,
   });
 
   final FeedPageLoader loader;
@@ -33,10 +34,17 @@ class FeedPlayerController extends ChangeNotifier {
   final int pageSize;
 
   /// Short-form feeds usually loop the active clip.
+  /// Ignored while [autoAdvanceOnEnd] is true (clip must end to advance).
   bool loopClips;
 
   /// Forward lock while cold-starting; keep off unless host app wants it.
   bool lockForwardWhileCold;
+
+  /// When true, slide to the next clip after end (disables effective looping).
+  bool autoAdvanceOnEnd;
+
+  /// Native looping only when looping is requested and auto-advance is off.
+  bool get effectiveLoopClips => loopClips && !autoAdvanceOnEnd;
 
   final List<FeedItem> items = [];
   final LinkedHashMap<String, VideoPlayerController> _parked =
@@ -62,7 +70,7 @@ class FeedPlayerController extends ChangeNotifier {
   /// Native / init failure — show retry overlay on the active page.
   bool hasPlaybackError = false;
 
-  /// Prolonged cold start — soft prompt before auto-retry.
+  /// Prolonged wait after attach — soft loading hint (not a hard error).
   bool showLoadingPrompt = false;
 
   int parkedVersion = 0;
@@ -75,6 +83,11 @@ class FeedPlayerController extends ChangeNotifier {
   VoidCallback? _playerListener;
   Timer? _loadingPromptTimer;
   Timer? _watchdogTimer;
+  bool _sawPlayingForAttach = false;
+  bool _autoAdvanceScheduled = false;
+
+  /// Bound by [FeedPlayerView] so end-of-clip can animate the [PageView].
+  Future<void> Function(int index)? animateToIndex;
 
   /// Block swipe to next while cold-loading (allow swipe back).
   bool get locksForwardSwipe {
@@ -232,7 +245,9 @@ class FeedPlayerController extends ChangeNotifier {
       return;
     }
 
-    _armColdStartWatchdog(seq);
+    // Hard watchdog only while decoding — soft "retry" prompt waits until
+    // after attach so slow HLS init does not flash the retry overlay.
+    _armColdStartWatchdog(seq, armSoftPrompt: false);
 
     final existingInit = _initFutures[key];
     VideoPlayerController? ctrl;
@@ -307,7 +322,7 @@ class FeedPlayerController extends ChangeNotifier {
         ctrl,
         timeout: FeedPlaybackStrategy.initializeTimeout,
       );
-      await ctrl.setLooping(loopClips);
+      await ctrl.setLooping(effectiveLoopClips);
       await ctrl.setVolume(0);
       return ctrl;
     } catch (e) {
@@ -335,6 +350,8 @@ class FeedPlayerController extends ChangeNotifier {
     playerReady = ctrl.value.isInitialized && !ctrl.value.hasError;
     videoFrameReady = FeedPlaybackStrategy.hasPaintedSize(ctrl);
     parkedVersion++;
+    _sawPlayingForAttach = ctrl.value.isPlaying;
+    _autoAdvanceScheduled = false;
     notifyListeners();
 
     _playerListener = () {
@@ -343,6 +360,7 @@ class FeedPlayerController extends ChangeNotifier {
       final ready = v.isInitialized && !v.hasError;
       final painted = FeedPlaybackStrategy.hasPaintedSize(ctrl);
       final playing = v.isPlaying;
+      if (playing) _sawPlayingForAttach = true;
       if (v.hasError && !hasPlaybackError) {
         hasPlaybackError = true;
         errorMessage = v.errorDescription ?? 'Playback error';
@@ -364,10 +382,11 @@ class FeedPlayerController extends ChangeNotifier {
         }
         notifyListeners();
       }
+      _maybeAutoAdvance(ctrl);
     };
     ctrl.addListener(_playerListener!);
     try {
-      await ctrl.setLooping(loopClips);
+      await ctrl.setLooping(effectiveLoopClips);
     } catch (_) {}
     if (restartFromStart && ctrl.value.position > Duration.zero) {
       try {
@@ -384,18 +403,26 @@ class FeedPlayerController extends ChangeNotifier {
     }
   }
 
-  void _armColdStartWatchdog(int seq) {
+  void _armColdStartWatchdog(int seq, {bool armSoftPrompt = true}) {
     _cancelColdStartTimers();
-    _loadingPromptTimer = Timer(
-      FeedPlaybackStrategy.coldStartRetryPrompt,
-      () {
-        if (_disposed || seq != _playSeq) return;
-        if (hasPlaybackError || showCenterPlay) return;
-        if (playerReady && videoFrameReady) return;
-        showLoadingPrompt = true;
-        notifyListeners();
-      },
-    );
+    // Re-arming means we are still waiting — drop any prior soft prompt so it
+    // cannot stick across attach / timer restarts and flash as a retry page.
+    if (showLoadingPrompt) {
+      showLoadingPrompt = false;
+      notifyListeners();
+    }
+    if (armSoftPrompt) {
+      _loadingPromptTimer = Timer(
+        FeedPlaybackStrategy.coldStartRetryPrompt,
+        () {
+          if (_disposed || seq != _playSeq) return;
+          if (hasPlaybackError || showCenterPlay) return;
+          if (playerReady && videoFrameReady) return;
+          showLoadingPrompt = true;
+          notifyListeners();
+        },
+      );
+    }
     _watchdogTimer = Timer(
       FeedPlaybackStrategy.coldStartWatchdog,
       () {
@@ -405,7 +432,7 @@ class FeedPlayerController extends ChangeNotifier {
         if (_autoRetryCount >= 1) {
           hasPlaybackError = true;
           errorMessage = 'Playback timed out';
-          showLoadingPrompt = true;
+          showLoadingPrompt = false;
           notifyListeners();
           return;
         }
@@ -603,16 +630,58 @@ class FeedPlayerController extends ChangeNotifier {
   }
 
   /// Toggle clip looping on the active player.
+  /// No-op while [autoAdvanceOnEnd] is true — see [effectiveLoopClips].
   Future<void> setLoopClips(bool value) async {
     if (loopClips == value) return;
     loopClips = value;
     final ctrl = player;
     if (ctrl != null) {
       try {
-        await ctrl.setLooping(value);
+        await ctrl.setLooping(effectiveLoopClips);
       } catch (_) {}
     }
     notifyListeners();
+  }
+
+  /// Toggle auto-advance to the next clip when the current one ends.
+  Future<void> setAutoAdvanceOnEnd(bool value) async {
+    if (autoAdvanceOnEnd == value) return;
+    autoAdvanceOnEnd = value;
+    final ctrl = player;
+    if (ctrl != null) {
+      try {
+        await ctrl.setLooping(effectiveLoopClips);
+      } catch (_) {}
+    }
+    notifyListeners();
+  }
+
+  void _maybeAutoAdvance(VideoPlayerController ctrl) {
+    if (!autoAdvanceOnEnd || _disposed || _autoAdvanceScheduled) return;
+    if (!_sawPlayingForAttach) return;
+    if (!FeedPlaybackStrategy.isPlaybackEnded(ctrl.value)) return;
+    _autoAdvanceScheduled = true;
+    unawaited(_runAutoAdvance(currentIndex + 1));
+  }
+
+  Future<void> _runAutoAdvance(int next) async {
+    try {
+      if (next >= items.length) {
+        if (hasMore) await loadMore();
+        if (_disposed || next >= items.length) return;
+      }
+      final animator = animateToIndex;
+      if (animator != null) {
+        await animator(next);
+      }
+      if (_disposed) return;
+      if (currentIndex != next) {
+        await onPageChanged(next);
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('[FeedPlayer] autoAdvance: $e');
+      _autoAdvanceScheduled = false;
+    }
   }
 
   /// Toggle forward-swipe lock while the active clip is still cold-starting.
@@ -654,6 +723,7 @@ class FeedPlayerController extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _playSeq++;
+    animateToIndex = null;
     _cancelColdStartTimers();
     _disposeAllPlayers();
     PlaybackAudio.surfaceMayPlay = false;

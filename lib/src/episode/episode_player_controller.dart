@@ -27,6 +27,7 @@ class EpisodePlayerController extends ChangeNotifier {
     this.urlTransformer,
     this.allowBackgroundPlayback = false,
     this.lockForwardWhileCold = false,
+    this.autoAdvanceOnEnd = true,
     this.pageSize = 10,
   });
 
@@ -37,6 +38,9 @@ class EpisodePlayerController extends ChangeNotifier {
   final UrlTransformer? urlTransformer;
   final bool allowBackgroundPlayback;
   bool lockForwardWhileCold;
+
+  /// When true, slide to the next episode after the current one ends.
+  bool autoAdvanceOnEnd;
   final int pageSize;
 
   SeriesInfo? series;
@@ -69,6 +73,11 @@ class EpisodePlayerController extends ChangeNotifier {
   int _autoRetryCount = 0;
   bool _disposed = false;
   bool _visible = true;
+  bool _sawPlayingForAttach = false;
+  bool _autoAdvanceScheduled = false;
+
+  /// Bound by [EpisodePlayerView] so end-of-clip can animate the [PageView].
+  Future<void> Function(int index)? animateToIndex;
 
   List<EpisodeItem> get episodes => series?.episodes ?? const [];
 
@@ -268,7 +277,9 @@ class EpisodePlayerController extends ChangeNotifier {
       return;
     }
 
-    _armColdStartWatchdog(seq);
+    // Hard watchdog only while decoding — soft "retry" prompt waits until
+    // after attach so slow HLS init does not flash the retry overlay.
+    _armColdStartWatchdog(seq, armSoftPrompt: false);
 
     final ctrl = PlayerFactory.create(
       url,
@@ -337,6 +348,8 @@ class EpisodePlayerController extends ChangeNotifier {
     playerReady = ctrl.value.isInitialized && !ctrl.value.hasError;
     videoFrameReady = FeedPlaybackStrategy.hasPaintedSize(ctrl);
     parkedVersion++;
+    _sawPlayingForAttach = ctrl.value.isPlaying;
+    _autoAdvanceScheduled = false;
 
     _playerListener = () {
       if (_disposed || !identical(player, ctrl)) return;
@@ -344,6 +357,7 @@ class EpisodePlayerController extends ChangeNotifier {
       final ready = v.isInitialized && !v.hasError;
       final painted = FeedPlaybackStrategy.hasPaintedSize(ctrl);
       final playing = v.isPlaying;
+      if (playing) _sawPlayingForAttach = true;
       if (v.hasError && !hasPlaybackError) {
         hasPlaybackError = true;
         errorMessage = v.errorDescription ?? 'Playback error';
@@ -365,6 +379,7 @@ class EpisodePlayerController extends ChangeNotifier {
         }
         notifyListeners();
       }
+      _maybeAutoAdvance(ctrl);
     };
     ctrl.addListener(_playerListener!);
     notifyListeners();
@@ -421,18 +436,26 @@ class EpisodePlayerController extends ChangeNotifier {
     await switchEpisode(index, restartFromStart: false);
   }
 
-  void _armColdStartWatchdog(int seq) {
+  void _armColdStartWatchdog(int seq, {bool armSoftPrompt = true}) {
     _cancelColdStartTimers();
-    _loadingPromptTimer = Timer(
-      FeedPlaybackStrategy.coldStartRetryPrompt,
-      () {
-        if (_disposed || seq != switchSeq) return;
-        if (hasPlaybackError || showCenterPlay) return;
-        if (playerReady && videoFrameReady) return;
-        showLoadingPrompt = true;
-        notifyListeners();
-      },
-    );
+    // Re-arming means we are still waiting — drop any prior soft prompt so it
+    // cannot stick across attach / timer restarts and flash as a retry page.
+    if (showLoadingPrompt) {
+      showLoadingPrompt = false;
+      notifyListeners();
+    }
+    if (armSoftPrompt) {
+      _loadingPromptTimer = Timer(
+        FeedPlaybackStrategy.coldStartRetryPrompt,
+        () {
+          if (_disposed || seq != switchSeq) return;
+          if (hasPlaybackError || showCenterPlay) return;
+          if (playerReady && videoFrameReady) return;
+          showLoadingPrompt = true;
+          notifyListeners();
+        },
+      );
+    }
     _watchdogTimer = Timer(
       FeedPlaybackStrategy.coldStartWatchdog,
       () {
@@ -442,7 +465,7 @@ class EpisodePlayerController extends ChangeNotifier {
         if (_autoRetryCount >= 1) {
           hasPlaybackError = true;
           errorMessage = 'Playback timed out';
-          showLoadingPrompt = true;
+          showLoadingPrompt = false;
           notifyListeners();
           return;
         }
@@ -580,6 +603,42 @@ class EpisodePlayerController extends ChangeNotifier {
     _playerListener = null;
   }
 
+  void _maybeAutoAdvance(VideoPlayerController ctrl) {
+    if (!autoAdvanceOnEnd || _disposed || _autoAdvanceScheduled) return;
+    if (!_sawPlayingForAttach) return;
+    if (!FeedPlaybackStrategy.isPlaybackEnded(ctrl.value)) return;
+    _autoAdvanceScheduled = true;
+    unawaited(_runAutoAdvance(currentIndex + 1));
+  }
+
+  Future<void> _runAutoAdvance(int next) async {
+    try {
+      if (next >= episodes.length) {
+        if (hasMore) await loadMore();
+        if (_disposed || next >= episodes.length) return;
+      }
+      final animator = animateToIndex;
+      if (animator != null) {
+        await animator(next);
+      }
+      if (_disposed) return;
+      // Animate may no-op if PageController has no clients yet — still switch.
+      if (currentIndex != next) {
+        await onEpisodePageChanged(next);
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('[EpisodePlayer] autoAdvance: $e');
+      _autoAdvanceScheduled = false;
+    }
+  }
+
+  /// Toggle auto-advance to the next episode when the current one ends.
+  void setAutoAdvanceOnEnd(bool value) {
+    if (autoAdvanceOnEnd == value) return;
+    autoAdvanceOnEnd = value;
+    notifyListeners();
+  }
+
   Future<void> togglePlayPause() async {
     final ctrl = player;
     if (ctrl == null) return;
@@ -686,6 +745,7 @@ class EpisodePlayerController extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     switchSeq++;
+    animateToIndex = null;
     _hideChromeTimer?.cancel();
     _cancelColdStartTimers();
     _parkActive();

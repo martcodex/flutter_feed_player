@@ -104,6 +104,7 @@ class FeedPlayerViewState extends State<FeedPlayerView> {
     super.initState();
     final start = widget.initialIndex < 0 ? 0 : widget.initialIndex;
     pageController = PageController(initialPage: start);
+    controller.animateToIndex = (index) => animateToPage(index);
     controller.addListener(_onCtrl);
     if (widget.autoInit) {
       WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -141,6 +142,7 @@ class FeedPlayerViewState extends State<FeedPlayerView> {
 
   @override
   void dispose() {
+    controller.animateToIndex = null;
     controller.removeListener(_onCtrl);
     pageController.dispose();
     super.dispose();
@@ -151,9 +153,12 @@ class FeedPlayerViewState extends State<FeedPlayerView> {
     int index, {
     Duration duration = const Duration(milliseconds: 280),
     Curve curve = Curves.easeOut,
-  }) {
-    if (!pageController.hasClients) return Future.value();
-    return pageController.animateToPage(
+  }) async {
+    if (!pageController.hasClients) {
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted || !pageController.hasClients) return;
+    }
+    await pageController.animateToPage(
       index,
       duration: duration,
       curve: curve,
@@ -240,15 +245,27 @@ class FeedPlayerViewState extends State<FeedPlayerView> {
                         widget.showBufferingIndicator &&
                         !c.videoFrameReady &&
                         !c.hasPlaybackError)
-                      const Center(
-                        child: CircularProgressIndicator(color: Colors.white54),
+                      Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const CircularProgressIndicator(
+                              color: Colors.white54,
+                            ),
+                            if (c.showLoadingPrompt) ...[
+                              const SizedBox(height: 14),
+                              const Text(
+                                'Taking longer than usual…',
+                                style: TextStyle(color: Colors.white70),
+                                textAlign: TextAlign.center,
+                              ),
+                            ],
+                          ],
+                        ),
                       ),
-                    if (isActive &&
-                        (c.hasPlaybackError || c.showLoadingPrompt))
+                    if (isActive && c.hasPlaybackError)
                       _PlaybackRetryOverlay(
-                        message: c.hasPlaybackError
-                            ? (c.errorMessage ?? 'Playback failed')
-                            : 'Taking longer than usual…',
+                        message: c.errorMessage ?? 'Playback failed',
                         onRetry: c.retryPlayback,
                       ),
                     if (isActive && widget.enableGestures)

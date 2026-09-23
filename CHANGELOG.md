@@ -1,3 +1,23 @@
+## 0.1.4
+
+* Add `autoAdvanceOnEnd` on `FeedPlayerController` / `EpisodePlayerController`
+  (default `true`): when a clip ends, animate to the next item (load-more if
+  needed). Effective looping is `loopClips && !autoAdvanceOnEnd`.
+* Add `setAutoAdvanceOnEnd` / keep `setLoopClips`; feed exposes
+  `effectiveLoopClips`.
+* Detect end-of-playback via `VideoPlayerValue.isCompleted` (plus near-end
+  fallback) so auto-advance is not missed while `isPlaying` is briefly true.
+* Soft cold-start hint (`showLoadingPrompt`) no longer opens the retry page;
+  it only shows under the buffering spinner. Retry overlay is for hard errors
+  / timeout only. Soft prompt arms after attach to avoid flashing on slow HLS.
+* Seek UX: `PlayerSeekBar` shimmer, thumb, scrub time label; chrome hides
+  meta / side actions while scrubbing (`onScrubbingChanged` on seek bar and
+  bottom chrome).
+* Feed chrome: optional `onMore` on `FeedPlayer` / `FeedPlayerChrome` /
+  `FeedSideActions`.
+* Example: grouped player param panel with loop ↔ auto-advance mutual
+  exclusion and related l10n.
+
 ## 0.1.3
 
 * Add `MediaFormat` for URL / `assetType` detection, chrome badges, and

@@ -60,6 +60,22 @@ class FeedPlaybackStrategy {
     }
   }
 
+  /// True when native playback has reached the end (not looping).
+  ///
+  /// Prefer [VideoPlayerValue.isCompleted]: on `VideoEventType.completed` the
+  /// plugin sets that flag while [VideoPlayerValue.isPlaying] may still be
+  /// true briefly, so a `!isPlaying && near-end` check alone misses the event.
+  static bool isPlaybackEnded(VideoPlayerValue v) {
+    if (!v.isInitialized || v.hasError) return false;
+    if (v.isCompleted) return true;
+    if (v.isPlaying) return false;
+    final duration = v.duration;
+    if (duration <= Duration.zero) return false;
+    final position = v.position;
+    if (position <= Duration.zero) return false;
+    return position + const Duration(milliseconds: 300) >= duration;
+  }
+
   static Duration maxBuffered(VideoPlayerValue value) {
     var max = Duration.zero;
     for (final range in value.buffered) {

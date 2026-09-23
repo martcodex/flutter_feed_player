@@ -77,90 +77,77 @@ class _DemoHomePageState extends State<DemoHomePage> {
     final selectedCount = MockVideos.clipsFor(_selected).length;
     return Scaffold(
       body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
+        child: Column(
           children: [
-            const _LanguageSwitcher(),
-            const SizedBox(height: 16),
-            Text(
-              l10n.brandName,
-              style: const TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.w800,
-                letterSpacing: -0.5,
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+                children: [
+                  const _LanguageSwitcher(),
+                  const SizedBox(height: 16),
+                  Text(
+                    l10n.brandName,
+                    style: const TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.5,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    l10n.tagline,
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.65),
+                      height: 1.4,
+                    ),
+                  ),
+                  const SizedBox(height: 28),
+                  Text(
+                    l10n.selectVideoType,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    l10n.introHint,
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.45),
+                      height: 1.4,
+                      fontSize: 13,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  _VideoTypeList(
+                    selected: _selected,
+                    onSelected: (f) => setState(() => _selected = f),
+                  ),
+                  const SizedBox(height: 24),
+                  PlayerParamPanel(
+                    params: _params,
+                    onChanged: (p) => setState(() => _params = p),
+                  ),
+                  const SizedBox(height: 28),
+                  Text(
+                    l10n.sourcesFooter,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.white.withValues(alpha: 0.4),
+                    ),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 8),
-            Text(
-              l10n.tagline,
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.65),
-                height: 1.4,
-              ),
-            ),
-            const SizedBox(height: 28),
-            Text(
-              l10n.selectVideoType,
-              style: const TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              l10n.introHint,
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.45),
-                height: 1.4,
-                fontSize: 13,
-              ),
-            ),
-            const SizedBox(height: 14),
-            _VideoTypeList(
-              selected: _selected,
-              onSelected: (f) => setState(() => _selected = f),
-            ),
-            const SizedBox(height: 18),
-            Text(
-              l10n.selectedTypeHint(
+            _PlayActionsBar(
+              selectedHint: l10n.selectedTypeHint(
                 l10n.videoTypeTitle(_selected),
                 selectedCount,
               ),
-              style: TextStyle(
-                fontSize: 13,
-                color: Colors.white.withValues(alpha: 0.55),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: FilledButton.tonal(
-                    onPressed: () => _openFeed(_selected),
-                    child: Text(l10n.playFeed),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: FilledButton.tonal(
-                    onPressed: () => _openEpisodes(_selected),
-                    child: Text(l10n.playEpisodes),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
-            PlayerParamPanel(
-              params: _params,
-              onChanged: (p) => setState(() => _params = p),
-            ),
-            const SizedBox(height: 28),
-            Text(
-              l10n.sourcesFooter,
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.white.withValues(alpha: 0.4),
-              ),
+              playFeedLabel: l10n.playFeed,
+              playEpisodesLabel: l10n.playEpisodes,
+              onPlayFeed: () => _openFeed(_selected),
+              onPlayEpisodes: () => _openEpisodes(_selected),
             ),
           ],
         ),
@@ -185,6 +172,75 @@ class _DemoHomePageState extends State<DemoHomePage> {
         builder: (_) => EpisodeDemoPage(
           formatFilter: filter,
           params: _params,
+        ),
+      ),
+    );
+  }
+}
+
+class _PlayActionsBar extends StatelessWidget {
+  const _PlayActionsBar({
+    required this.selectedHint,
+    required this.playFeedLabel,
+    required this.playEpisodesLabel,
+    required this.onPlayFeed,
+    required this.onPlayEpisodes,
+  });
+
+  final String selectedHint;
+  final String playFeedLabel;
+  final String playEpisodesLabel;
+  final VoidCallback onPlayFeed;
+  final VoidCallback onPlayEpisodes;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: const Color(0xFF0B0B0F),
+        border: Border(
+          top: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.35),
+            blurRadius: 16,
+            offset: const Offset(0, -4),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(24, 12, 24, 8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              selectedHint,
+              style: const TextStyle(
+                fontSize: 13,
+                color: Colors.white,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: FilledButton.tonal(
+                    onPressed: onPlayFeed,
+                    child: Text(playFeedLabel),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: FilledButton.tonal(
+                    onPressed: onPlayEpisodes,
+                    child: Text(playEpisodesLabel),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );

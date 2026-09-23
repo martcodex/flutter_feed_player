@@ -9,7 +9,8 @@ import 'episode_player_view.dart';
 /// Default episode chrome: top bar, side actions, bottom meta/seek, boost badge.
 ///
 /// Respects [EpisodePlayerController.showChrome] with fade animation.
-class EpisodePlayerChrome extends StatelessWidget {
+/// While scrubbing, clears chrome and keeps only the seek bar + time.
+class EpisodePlayerChrome extends StatefulWidget {
   const EpisodePlayerChrome({
     super.key,
     required this.slot,
@@ -34,65 +35,78 @@ class EpisodePlayerChrome extends StatelessWidget {
   final bool showBoostBadge;
 
   @override
-  Widget build(BuildContext context) {
-    if (!slot.isActive) return const SizedBox.shrink();
+  State<EpisodePlayerChrome> createState() => _EpisodePlayerChromeState();
+}
 
+class _EpisodePlayerChromeState extends State<EpisodePlayerChrome> {
+  bool _scrubbing = false;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!widget.slot.isActive) return const SizedBox.shrink();
+
+    final slot = widget.slot;
     final c = slot.controller;
     final ep = slot.episode;
     final series = slot.series;
     final topPad = MediaQuery.paddingOf(context).top;
+    final showUi = c.showChrome && !_scrubbing;
 
     return Stack(
       fit: StackFit.expand,
       children: [
         // Paused with chrome hidden — keep a play affordance.
-        if (showCenterPlay && !c.showChrome && c.showCenterPlay)
+        if (widget.showCenterPlay &&
+            !c.showChrome &&
+            !_scrubbing &&
+            c.showCenterPlay)
           EpisodeCenterControl(
             isPlaying: false,
             onPressed: c.togglePlayPause,
           ),
         AnimatedOpacity(
-          opacity: c.showChrome ? 1 : 0,
+          opacity: showUi ? 1 : 0,
           duration: const Duration(milliseconds: 180),
           child: IgnorePointer(
-            ignoring: !c.showChrome,
+            ignoring: !showUi,
             child: Stack(
               children: [
-                if (showCenterPlay)
+                if (widget.showCenterPlay)
                   EpisodeCenterControl(
                     isPlaying: c.isPlaying,
                     onPressed: c.togglePlayPause,
                   ),
-                if (showTopBar)
+                if (widget.showTopBar)
                   EpisodeTopBar(
                     topPad: topPad,
                     label: ep.displayLabel,
                     speed: c.playbackSpeed,
-                    onBack: onBack ?? () => Navigator.maybePop(context),
+                    onBack: widget.onBack ?? () => Navigator.maybePop(context),
                     onSpeed: () => showEpisodeSpeedSheet(context, c),
                   ),
-                if (showSideActions)
+                if (widget.showSideActions)
                   EpisodeSideActions(
-                    onEpisodes: onOpenEpisodeList ??
+                    onEpisodes: widget.onOpenEpisodeList ??
                         () => showEpisodeListSheet(context),
-                    onShare: onShare,
-                  ),
-                if (showBottomChrome)
-                  EpisodeBottomChrome(
-                    title: series.title,
-                    episodeTitle:
-                        ep.title.isNotEmpty ? ep.title : ep.displayLabel,
-                    description: ep.description.isNotEmpty
-                        ? ep.description
-                        : series.description,
-                    seekController: slot.player,
-                    onSeekStart: c.revealChrome,
+                    onShare: widget.onShare,
                   ),
               ],
             ),
           ),
         ),
-        if (showBoostBadge && c.isBoosting) const EpisodeBoostBadge(),
+        if (widget.showBottomChrome && (c.showChrome || _scrubbing))
+          EpisodeBottomChrome(
+            title: series.title,
+            episodeTitle: ep.title.isNotEmpty ? ep.title : ep.displayLabel,
+            description: ep.description.isNotEmpty
+                ? ep.description
+                : series.description,
+            seekController: slot.player,
+            onSeekStart: c.revealChrome,
+            onScrubbingChanged: (v) => setState(() => _scrubbing = v),
+          ),
+        if (widget.showBoostBadge && c.isBoosting && !_scrubbing)
+          const EpisodeBoostBadge(),
       ],
     );
   }
@@ -269,13 +283,9 @@ class EpisodeCircleIcon extends StatelessWidget {
   Widget build(BuildContext context) {
     return InkWell(
       onTap: onTap,
-      child: Container(
+      child: SizedBox(
         width: 48,
         height: 48,
-        decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: 0.28),
-          shape: BoxShape.circle,
-        ),
         child: Icon(icon, color: Colors.white, size: 24),
       ),
     );
@@ -283,7 +293,9 @@ class EpisodeCircleIcon extends StatelessWidget {
 }
 
 /// Bottom series / episode meta + seek bar.
-class EpisodeBottomChrome extends StatelessWidget {
+///
+/// While scrubbing, meta is hidden so only the seek bar + time remain.
+class EpisodeBottomChrome extends StatefulWidget {
   const EpisodeBottomChrome({
     super.key,
     required this.title,
@@ -292,6 +304,7 @@ class EpisodeBottomChrome extends StatelessWidget {
     required this.seekController,
     this.onSeekStart,
     this.belowMeta,
+    this.onScrubbingChanged,
   });
 
   final String title;
@@ -302,71 +315,93 @@ class EpisodeBottomChrome extends StatelessWidget {
 
   /// Optional content rendered under the episode meta (above the seek bar).
   final Widget? belowMeta;
+  final ValueChanged<bool>? onScrubbingChanged;
+
+  @override
+  State<EpisodeBottomChrome> createState() => _EpisodeBottomChromeState();
+}
+
+class _EpisodeBottomChromeState extends State<EpisodeBottomChrome> {
+  bool _scrubbing = false;
 
   @override
   Widget build(BuildContext context) {
     final bottom = MediaQuery.paddingOf(context).bottom;
-    final desc = description.length > 90
-        ? '${description.substring(0, 90)}…'
-        : description;
+    final desc = widget.description.length > 90
+        ? '${widget.description.substring(0, 90)}…'
+        : widget.description;
 
     return Positioned(
       left: 0,
       right: 0,
       bottom: 0,
       child: Container(
-        padding: EdgeInsets.fromLTRB(16, 40, 16, 14 + bottom),
-        decoration: const BoxDecoration(
+        padding: EdgeInsets.fromLTRB(
+          16,
+          _scrubbing ? 16 : 40,
+          16,
+          14 + bottom,
+        ),
+        decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [Colors.transparent, Colors.black87],
+            colors: [
+              Colors.transparent,
+              Colors.black87.withValues(alpha: _scrubbing ? 0.55 : 1),
+            ],
           ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Padding(
-              padding: const EdgeInsets.only(right: 48),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 17,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    episodeTitle,
-                    style: const TextStyle(color: Colors.white70, fontSize: 13),
-                  ),
-                  if (desc.isNotEmpty) ...[
-                    const SizedBox(height: 6),
-                    Text(
-                      desc,
-                      style: const TextStyle(color: Colors.white60, fontSize: 12),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            if (belowMeta != null) ...[
-              const SizedBox(height: 10),
+            if (!_scrubbing) ...[
               Padding(
                 padding: const EdgeInsets.only(right: 48),
-                child: belowMeta!,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      widget.title,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      widget.episodeTitle,
+                      style: const TextStyle(color: Colors.white70, fontSize: 13),
+                    ),
+                    if (desc.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        desc,
+                        style: const TextStyle(color: Colors.white60, fontSize: 12),
+                      ),
+                    ],
+                  ],
+                ),
               ),
+              if (widget.belowMeta != null) ...[
+                const SizedBox(height: 10),
+                Padding(
+                  padding: const EdgeInsets.only(right: 48),
+                  child: widget.belowMeta!,
+                ),
+              ],
+              const SizedBox(height: 10),
             ],
-            const SizedBox(height: 10),
             PlayerSeekBar(
-              controller: seekController,
-              onSeekStart: onSeekStart,
+              controller: widget.seekController,
+              onSeekStart: widget.onSeekStart,
+              onScrubbingChanged: (v) {
+                setState(() => _scrubbing = v);
+                widget.onScrubbingChanged?.call(v);
+              },
             ),
           ],
         ),

@@ -21,7 +21,9 @@ Swipe feed, pull-to-refresh, and load-more in the example app:
 - Park / promote `VideoPlayerController` map for instant swipe
 - Adjacent preload with ~2s warm buffer
 - Exclusive unmute (one audible player at a time)
-- Tap play/pause, long-press 2×, seek bar, speed sheet (episode)
+- Auto-advance to next clip / episode on end (`autoAdvanceOnEnd`; mutually exclusive with effective loop)
+- Tap play/pause, long-press 2×, seek bar with scrub time, speed sheet (episode)
+- Scrub focus: while dragging the seek bar, chrome hides meta / side actions
 - Pull-to-refresh on first page / pull-up load-more on last page
 - Multi-format playback: MP4 / HLS / MOV / M4V / WebM / DASH (platform-dependent)
 - Network, Flutter asset (`asset://…`), and local `file:` URLs via `PlayerFactory.create`
@@ -171,7 +173,9 @@ class _FeedPageState extends State<FeedPage> {
         return list.map(mapFeedDto).toList();
       },
       pageSize: _pageSize,
-      loopClips: true,              // 短视频循环
+      // 默认 autoAdvanceOnEnd: true（播完滑下一则）。短视频循环请见下表。
+      loopClips: true,              // 仅当 autoAdvanceOnEnd == false 时生效
+      autoAdvanceOnEnd: false,      // false + loopClips → 单卡循环
       lockForwardWhileCold: false,  // HLS 冷启动时建议保持 false
       // headersProvider / urlTransformer — 见下文 CDN
     );
@@ -195,6 +199,7 @@ class _FeedPageState extends State<FeedPage> {
           // 跳转 EpisodePlayer，传入 seriesId / 起始集
         },
         onShare: (index) { /* 分享 */ },
+        onMore: (index) { /* 更多菜单 */ },
       ),
     );
   }
@@ -202,6 +207,16 @@ class _FeedPageState extends State<FeedPage> {
 ```
 
 `FeedPlayerView` 默认 `autoInit: true`，首帧会调用 `controller.init()` → `refresh()` 拉第 1 页。也可自行 `await controller.init()`。
+
+**循环 vs 自动下一则：**
+
+| `loopClips` | `autoAdvanceOnEnd` | 实际行为 |
+|-------------|--------------------|----------|
+| `true` | `false` | 当前卡循环（短视频常见） |
+| `*` | `true`（默认） | 播完动画滑到下一则；`effectiveLoopClips == false` |
+| `false` | `false` | 播完停在片尾 |
+
+运行时可调用 `setLoopClips` / `setAutoAdvanceOnEnd`；开启自动下一则时会强制关闭原生 looping。
 
 **分页手势：**
 
@@ -250,6 +265,8 @@ class _SeriesPageState extends State<SeriesPage> {
       pageSize: _pageSize,
       initialEpisodeNo: 1,
       lockForwardWhileCold: false,
+      // 默认 true：播完自动滑到下一集；末页会先 loadMore
+      autoAdvanceOnEnd: true,
     );
   }
 
@@ -297,6 +314,8 @@ FeedPlayerView(
           liked: slot.item.isLiked,
           likeCount: slot.item.likeCount,
           onLike: () => slot.controller.toggleLike(slot.index),
+          onShare: () { /* … */ },
+          onMore: () { /* … */ },
         ),
         FeedBottomChrome(
           bottomInset: 0,
@@ -306,6 +325,7 @@ FeedPlayerView(
           ctaText: slot.item.ctaText,
           formatLabel: slot.item.formatLabel,
           seekController: slot.player,
+          // 拖拽进度条时可用 onScrubbingChanged 隐藏其它浮层
         ),
         // 也可完全自绘，使用 slot.controller / slot.item / slot.player
       ],
@@ -316,7 +336,9 @@ FeedPlayerView(
 
 剧集侧同理：用 `EpisodePlayerSlot` + `EpisodeTopBar` / `EpisodeBottomChrome` / `EpisodeCenterControl` 等，或整页换成自己的 UI。
 
-`loadingBuilder` / `errorBuilder` 可替换首屏加载、空列表错误壳。
+默认 chrome（`FeedPlayerChrome` / `EpisodePlayerChrome`）在 **scrub 拖拽** 时会收起标题、侧栏等，只保留进度条与时间码；`PlayerSeekBar` / `*BottomChrome` 暴露 `onScrubbingChanged` 便于自绘同样行为。
+
+`loadingBuilder` / `errorBuilder` 可替换首屏加载、空列表错误壳。冷启动过久时 `showLoadingPrompt` 只在缓冲指示下显示软提示文案，**不再**当作重试页；硬错误（含超时）才走 retry overlay。
 
 ### 6. CDN 鉴权 / URL 改写（可选）
 
@@ -343,6 +365,7 @@ FeedPlayerController(
 - `FeedItem.identity` / `episodeId` 尽量稳定唯一，便于 park 缓存命中。
 - 从 Feed 进剧集：在 `onWatchFullSeries` 里 `Navigator.push` 打开带同一 `seriesId` 的 `EpisodePlayer`。
 - WebM / DASH 在 iOS/macOS 不可播；可用 `MediaFormat` 过滤列表或展示 `unsupportedReason`。
+- View 会绑定 `controller.animateToIndex`，供 `autoAdvanceOnEnd` 驱动 `PageView` 动画；自建列表时需自行赋值。
 
 ### 8. 接入检查清单
 
@@ -354,7 +377,8 @@ FeedPlayerController(
 - [ ] `Controller` 在 `dispose` 中释放
 - [ ] 选用 `*Player` 或 `*PlayerView` + chrome
 - [ ] 需要鉴权时配置 `headersProvider` / `urlTransformer`
-- [ ] 真机验证竖滑、下拉刷新、上拉加载、音画互斥
+- [ ] 按需配置 `loopClips` / `autoAdvanceOnEnd`（二者有效互斥）
+- [ ] 真机验证竖滑、下拉刷新、上拉加载、播完自动下一则、音画互斥
 
 ---
 
@@ -366,11 +390,15 @@ final controller = FeedPlayerController(
     // Map your API (or mock) → List<FeedItem>
     return mockFeedPage(page);
   },
+  // Defaults: autoAdvanceOnEnd: true. For looping shorts:
+  // loopClips: true, autoAdvanceOnEnd: false,
 );
 
 FeedPlayer(
   controller: controller,
   onWatchFullSeries: (index) { /* open EpisodePlayer */ },
+  onShare: (index) { /* … */ },
+  onMore: (index) { /* … */ },
 );
 ```
 
@@ -381,6 +409,7 @@ final controller = EpisodePlayerController(
   loader: (page) async => mockSeriesPage(page),
   pageSize: 10,
   initialEpisodeNo: 1,
+  // autoAdvanceOnEnd: true (default) — binge to next episode
 );
 
 EpisodePlayer(controller: controller);
@@ -393,7 +422,7 @@ cd example
 flutter run
 ```
 
-Example home lists format filters available on the **current platform** (MP4 / HLS / MOV / M4V; plus WebM / DASH where supported). Samples include public network streams and a bundled WebM under `asset://assets/videos/…`. Demo pages compose chrome via `overlayBuilder`.
+Example home lists format filters available on the **current platform** (MP4 / HLS / MOV / M4V; plus WebM / DASH where supported). Samples include public network streams and a bundled WebM under `asset://assets/videos/…`. Demo pages expose grouped playback toggles (gestures, pull refresh/load-more, lock-forward, loop, auto-advance) and compose chrome via `overlayBuilder`.
 
 ## Models
 
@@ -405,9 +434,11 @@ Provide `playUrl` and/or `assets[].url`. HLS URLs containing `/v{n}/index.m3u8` 
 
 ## Public chrome building blocks
 
-**Feed:** `FeedPlayerChrome`, `FeedCenterPlayIcon`, `FeedSideActions`, `FeedBottomChrome`, `PlayerSeekBar`
+**Feed:** `FeedPlayerChrome`, `FeedCenterPlayIcon`, `FeedSideActions` (like / share / more), `FeedBottomChrome`, `FeedActionButton`, `PlayerSeekBar`
 
 **Episode:** `EpisodePlayerChrome`, `EpisodeTopBar`, `EpisodeCenterControl`, `EpisodeSideActions`, `EpisodeBottomChrome`, `EpisodeBoostBadge`
+
+`PlayerSeekBar` supports shimmer while uninitialized, a progress thumb, scrub time labels (`current / total`), and `onScrubbingChanged`.
 
 ## License
 

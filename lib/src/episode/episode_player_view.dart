@@ -86,6 +86,7 @@ class EpisodePlayerViewState extends State<EpisodePlayerView> {
   @override
   void initState() {
     super.initState();
+    controller.animateToIndex = (index) => animateToEpisode(index);
     controller.addListener(_onCtrl);
     if (widget.autoInit) {
       WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -133,6 +134,7 @@ class EpisodePlayerViewState extends State<EpisodePlayerView> {
 
   @override
   void dispose() {
+    controller.animateToIndex = null;
     controller.removeListener(_onCtrl);
     pageController?.dispose();
     super.dispose();
@@ -144,8 +146,14 @@ class EpisodePlayerViewState extends State<EpisodePlayerView> {
     Duration duration = const Duration(milliseconds: 280),
     Curve curve = Curves.easeOut,
   }) async {
-    final pc = pageController;
-    if (pc == null || !pc.hasClients) return;
+    var pc = pageController;
+    if (pc == null) return;
+    if (!pc.hasClients) {
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted) return;
+      pc = pageController;
+      if (pc == null || !pc.hasClients) return;
+    }
     await pc.animateToPage(index, duration: duration, curve: curve);
   }
 
@@ -222,15 +230,27 @@ class EpisodePlayerViewState extends State<EpisodePlayerView> {
                       widget.showBufferingIndicator &&
                       !c.videoFrameReady &&
                       !c.hasPlaybackError)
-                    const Center(
-                      child: CircularProgressIndicator(color: Colors.white54),
+                    Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const CircularProgressIndicator(
+                            color: Colors.white54,
+                          ),
+                          if (c.showLoadingPrompt) ...[
+                            const SizedBox(height: 14),
+                            const Text(
+                              'Taking longer than usual…',
+                              style: TextStyle(color: Colors.white70),
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
+                        ],
+                      ),
                     ),
-                  if (isActive &&
-                      (c.hasPlaybackError || c.showLoadingPrompt))
+                  if (isActive && c.hasPlaybackError)
                     _EpisodeRetryOverlay(
-                      message: c.hasPlaybackError
-                          ? (c.errorMessage ?? 'Playback failed')
-                          : 'Taking longer than usual…',
+                      message: c.errorMessage ?? 'Playback failed',
                       onRetry: c.retryPlayback,
                     ),
                   if (isActive && widget.enableGestures)
