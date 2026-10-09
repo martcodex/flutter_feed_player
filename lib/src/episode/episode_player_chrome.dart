@@ -55,11 +55,7 @@ class _EpisodePlayerChromeState extends State<EpisodePlayerChrome> {
     return Stack(
       fit: StackFit.expand,
       children: [
-        // Paused with chrome hidden — keep a play affordance.
-        if (widget.showCenterPlay &&
-            !c.showChrome &&
-            !_scrubbing &&
-            c.showCenterPlay)
+        if (!_scrubbing && widget.showCenterPlay && _showPausedPlay(c))
           EpisodeCenterControl(
             isPlaying: false,
             onPressed: c.togglePlayPause,
@@ -71,9 +67,9 @@ class _EpisodePlayerChromeState extends State<EpisodePlayerChrome> {
             ignoring: !showUi,
             child: Stack(
               children: [
-                if (widget.showCenterPlay)
+                if (widget.showCenterPlay && _showPauseWhilePlaying(c))
                   EpisodeCenterControl(
-                    isPlaying: c.isPlaying,
+                    isPlaying: true,
                     onPressed: c.togglePlayPause,
                   ),
                 if (widget.showTopBar)
@@ -130,16 +126,29 @@ class EpisodeCenterControl extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: IconButton(
-        onPressed: onPressed,
-        iconSize: size,
-        icon: Icon(
+      child: GestureDetector(
+        onTap: onPressed,
+        behavior: HitTestBehavior.opaque,
+        child: Icon(
           isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
           color: color,
+          size: size,
         ),
       ),
     );
   }
+}
+
+bool _centerReady(EpisodePlayerController c) {
+  return c.videoFrameReady && !c.hasPlaybackError;
+}
+
+bool _showPausedPlay(EpisodePlayerController c) {
+  return c.showCenterPlay && _centerReady(c);
+}
+
+bool _showPauseWhilePlaying(EpisodePlayerController c) {
+  return c.showCenterPause && c.isPlaying && _centerReady(c);
 }
 
 /// Large center play glyph (non-interactive). Prefer [EpisodeCenterControl].

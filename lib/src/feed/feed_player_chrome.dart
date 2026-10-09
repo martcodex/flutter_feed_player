@@ -50,7 +50,10 @@ class _FeedPlayerChromeState extends State<FeedPlayerChrome> {
     return Stack(
       fit: StackFit.expand,
       children: [
-        if (!_scrubbing && widget.showCenterPlay && c.showCenterPlay)
+        if (!_scrubbing &&
+            widget.showCenterPlay &&
+            c.showCenterPlay &&
+            c.videoFrameReady)
           const FeedCenterPlayIcon(),
         if (!_scrubbing && widget.showSideActions)
           FeedSideActions(

@@ -10,9 +10,16 @@
 * Soft cold-start hint (`showLoadingPrompt`) no longer opens the retry page;
   it only shows under the buffering spinner. Retry overlay is for hard errors
   / timeout only. Soft prompt arms after attach to avoid flashing on slow HLS.
-* Seek UX: `PlayerSeekBar` shimmer, thumb, scrub time label; chrome hides
-  meta / side actions while scrubbing (`onScrubbingChanged` on seek bar and
-  bottom chrome).
+* Seek UX: `PlayerSeekBar` thumb and scrub time label; chrome hides meta /
+  side actions while scrubbing (`onScrubbingChanged` on seek bar and bottom
+  chrome). Before the player is initialized, the track shows a center-out
+  loading beam (ease-out expand for ~70% of a 700ms loop, then fade).
+* Buffering spinners (feed, episode, pull-to-refresh) use solid white.
+* Center play/pause is a plain icon (no circular splash). It stays hidden
+  until the first video frame, so it does not sit on the spinner.
+* Episode: `showCenterPause` stays off when a swipe or entry auto-starts
+  playback. The first tap while playing reveals the pause button; a later
+  tap hides chrome. `showCenterPlay` is still the paused-state play glyph.
 * Feed chrome: optional `onMore` on `FeedPlayer` / `FeedPlayerChrome` /
   `FeedSideActions`.
 * Example: grouped player param panel with loop ↔ auto-advance mutual

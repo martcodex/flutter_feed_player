@@ -262,7 +262,7 @@ class _EdgeIndicator extends StatelessWidget {
                 : CircularProgressIndicator(
                     value: progress,
                     strokeWidth: 2.4,
-                    color: armed ? Colors.white : Colors.white54,
+                    color: Colors.white,
                   ),
           ),
           const SizedBox(height: 8),

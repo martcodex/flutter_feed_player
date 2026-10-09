@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 
-/// Seek bar with shimmer loading, progress thumb, and scrub time labels.
+/// Seek bar with a center-out loading beam, progress thumb, and scrub time labels.
 class PlayerSeekBar extends StatefulWidget {
   const PlayerSeekBar({
     super.key,
@@ -43,7 +43,7 @@ class _PlayerSeekBarState extends State<PlayerSeekBar>
     super.initState();
     _shimmer = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1400),
+      duration: const Duration(milliseconds: 700),
     )..repeat();
   }
 
@@ -135,17 +135,40 @@ class _PlayerSeekBarState extends State<PlayerSeekBar>
           child: SizedBox(
             height: widget.height,
             width: double.infinity,
-            child: AnimatedBuilder(
-              animation: _shimmer,
-              builder: (context, _) {
-                return CustomPaint(
-                  painter: _ShimmerTrackPainter(
-                    progress: _shimmer.value,
-                    baseColor: widget.inactiveColor,
-                    highlightColor: widget.activeColor,
-                  ),
-                );
-              },
+            child: ColoredBox(
+              color: widget.inactiveColor,
+              child: AnimatedBuilder(
+                animation: _shimmer,
+                builder: (context, _) {
+                  // 0→0.7 expands from the center to both edges; 0.7→1 fades out.
+                  final t = _shimmer.value;
+                  final expand = (t / 0.7).clamp(0.0, 1.0);
+                  final fade = t < 0.7
+                      ? 1.0
+                      : (1.0 - ((t - 0.7) / 0.3)).clamp(0.0, 1.0);
+                  final eased = Curves.easeOutCubic.transform(expand);
+
+                  return Align(
+                    alignment: Alignment.center,
+                    child: FractionallySizedBox(
+                      widthFactor: eased.clamp(0.02, 1.0),
+                      heightFactor: 1,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              widget.activeColor.withValues(alpha: 0),
+                              widget.activeColor.withValues(alpha: 0.95 * fade),
+                              widget.activeColor.withValues(alpha: 0),
+                            ],
+                            stops: const [0.0, 0.5, 1.0],
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
             ),
           ),
         ),
@@ -256,53 +279,5 @@ class _PlayerSeekBarState extends State<PlayerSeekBar>
       return '$h:$mm:$s';
     }
     return '$m:$s';
-  }
-}
-
-/// Flowing shimmer (流光) fill across an inactive track.
-class _ShimmerTrackPainter extends CustomPainter {
-  _ShimmerTrackPainter({
-    required this.progress,
-    required this.baseColor,
-    required this.highlightColor,
-  });
-
-  final double progress;
-  final Color baseColor;
-  final Color highlightColor;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final rrect = RRect.fromRectAndRadius(
-      Offset.zero & size,
-      const Radius.circular(99),
-    );
-    canvas.drawRRect(rrect, Paint()..color = baseColor);
-
-    final bandW = size.width * 0.45;
-    final start = -bandW + (size.width + bandW * 2) * progress;
-    final rect = Rect.fromLTWH(start, 0, bandW, size.height);
-    final shader = LinearGradient(
-      begin: Alignment.centerLeft,
-      end: Alignment.centerRight,
-      colors: [
-        highlightColor.withValues(alpha: 0.0),
-        highlightColor.withValues(alpha: 0.55),
-        highlightColor.withValues(alpha: 0.0),
-      ],
-      stops: const [0.0, 0.5, 1.0],
-    ).createShader(rect);
-
-    canvas.save();
-    canvas.clipRRect(rrect);
-    canvas.drawRect(rect, Paint()..shader = shader);
-    canvas.restore();
-  }
-
-  @override
-  bool shouldRepaint(covariant _ShimmerTrackPainter oldDelegate) {
-    return oldDelegate.progress != progress ||
-        oldDelegate.baseColor != baseColor ||
-        oldDelegate.highlightColor != highlightColor;
   }
 }

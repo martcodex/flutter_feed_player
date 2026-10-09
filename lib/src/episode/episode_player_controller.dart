@@ -54,6 +54,10 @@ class EpisodePlayerController extends ChangeNotifier {
   bool isPlaying = false;
   bool showChrome = true;
   bool showCenterPlay = false;
+
+  /// Pause glyph after the user opens controls. Stays off when a swipe
+  /// auto-starts playback, so the button does not flash over the new clip.
+  bool showCenterPause = false;
   bool playerReady = false;
   bool videoFrameReady = false;
   bool isBoosting = false;
@@ -237,6 +241,7 @@ class EpisodePlayerController extends ChangeNotifier {
 
     currentIndex = index;
     showCenterPlay = false;
+    showCenterPause = false;
     errorMessage = null;
     hasPlaybackError = false;
     showLoadingPrompt = false;
@@ -717,10 +722,21 @@ class EpisodePlayerController extends ChangeNotifier {
   }
 
   void toggleChrome() {
+    // Chrome is already up on entry and after a swipe. The first tap while
+    // playing should reveal the pause button, not dismiss the controls.
+    if (isPlaying && !showCenterPause) {
+      showChrome = true;
+      showCenterPause = true;
+      _armChromeHide();
+      notifyListeners();
+      return;
+    }
     showChrome = !showChrome;
     if (showChrome) {
+      showCenterPause = isPlaying;
       _armChromeHide();
     } else {
+      showCenterPause = false;
       _hideChromeTimer?.cancel();
     }
     notifyListeners();
@@ -737,6 +753,7 @@ class EpisodePlayerController extends ChangeNotifier {
     _hideChromeTimer = Timer(const Duration(seconds: 4), () {
       if (_disposed || !isPlaying || isBoosting) return;
       showChrome = false;
+      showCenterPause = false;
       notifyListeners();
     });
   }

@@ -111,9 +111,13 @@ class _DemoEpisodeChromeState extends State<_DemoEpisodeChrome> {
     return Stack(
       fit: StackFit.expand,
       children: [
-        if (!c.showChrome && !_scrubbing && c.showCenterPlay)
+        if (!_scrubbing &&
+            c.showCenterPlay &&
+            c.videoFrameReady &&
+            !c.hasPlaybackError)
           EpisodeCenterControl(
             isPlaying: false,
+            color: Colors.white,
             onPressed: c.togglePlayPause,
           ),
         AnimatedOpacity(
@@ -123,10 +127,15 @@ class _DemoEpisodeChromeState extends State<_DemoEpisodeChrome> {
             ignoring: !showUi,
             child: Stack(
               children: [
-                EpisodeCenterControl(
-                  isPlaying: c.isPlaying,
-                  onPressed: c.togglePlayPause,
-                ),
+                if (c.showCenterPause &&
+                    c.isPlaying &&
+                    c.videoFrameReady &&
+                    !c.hasPlaybackError)
+                  EpisodeCenterControl(
+                    isPlaying: true,
+                    color: Colors.white,
+                    onPressed: c.togglePlayPause,
+                  ),
                 EpisodeTopBar(
                   topPad: topPad,
                   label: pageLabel.isNotEmpty

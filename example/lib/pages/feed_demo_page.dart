@@ -125,7 +125,8 @@ class _DemoFeedChromeState extends State<_DemoFeedChrome> {
     return Stack(
       fit: StackFit.expand,
       children: [
-        if (!_scrubbing && c.showCenterPlay) const FeedCenterPlayIcon(),
+        if (!_scrubbing && c.showCenterPlay && c.videoFrameReady)
+          const FeedCenterPlayIcon(color: Colors.white),
         if (!_scrubbing)
           Positioned(
             top: top + 4,

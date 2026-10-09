@@ -23,6 +23,9 @@ Swipe feed, pull-to-refresh, and load-more in the example app:
 - Exclusive unmute (one audible player at a time)
 - Auto-advance to next clip / episode on end (`autoAdvanceOnEnd`; mutually exclusive with effective loop)
 - Tap play/pause, long-press 2×, seek bar with scrub time, speed sheet (episode)
+- Episode pause glyph appears on tap while playing, not when a swipe auto-starts
+- Center play/pause stays hidden until the first frame (no overlap with the white buffering spinner)
+- Seek bar shows a center-out loading beam until the player is initialized
 - Scrub focus: while dragging the seek bar, chrome hides meta / side actions
 - Pull-to-refresh on first page / pull-up load-more on last page
 - Multi-format playback: MP4 / HLS / MOV / M4V / WebM / DASH (platform-dependent)
@@ -308,7 +311,8 @@ FeedPlayerView(
     if (!slot.isActive) return const SizedBox.shrink();
     return Stack(
       children: [
-        if (slot.controller.showCenterPlay) const FeedCenterPlayIcon(),
+        if (slot.controller.showCenterPlay && slot.controller.videoFrameReady)
+          const FeedCenterPlayIcon(),
         FeedSideActions(
           bottomInset: 0,
           liked: slot.item.isLiked,
@@ -336,7 +340,20 @@ FeedPlayerView(
 
 剧集侧同理：用 `EpisodePlayerSlot` + `EpisodeTopBar` / `EpisodeBottomChrome` / `EpisodeCenterControl` 等，或整页换成自己的 UI。
 
-默认 chrome（`FeedPlayerChrome` / `EpisodePlayerChrome`）在 **scrub 拖拽** 时会收起标题、侧栏等，只保留进度条与时间码；`PlayerSeekBar` / `*BottomChrome` 暴露 `onScrubbingChanged` 便于自绘同样行为。
+中心播放/暂停：
+
+| 状态 | 行为 |
+|------|------|
+| 首帧未到（`!videoFrameReady`） | 不画中心按钮，只留白色缓冲圈 |
+| 推荐流暂停 | `showCenterPlay` 为真时画 `FeedCenterPlayIcon` |
+| 剧集刚进入 / 上下滑自动开播 | `showCenterPause` 为假，不闪暂停 |
+| 剧集播放中第一次点屏幕 | `toggleChrome()` 打开暂停按钮，不收起控件 |
+| 剧集再次点空白处 | 收起 chrome，并清掉暂停按钮 |
+| 剧集已暂停 | `showCenterPlay` 为真时画播放图标 |
+
+`EpisodeCenterControl` 是纯图标（无圆形水波底），颜色用 `color`（默认 `Colors.white70`）。Example 里传 `Colors.white`。
+
+默认 chrome（`FeedPlayerChrome` / `EpisodePlayerChrome`）在 **scrub 拖拽** 时会收起标题、侧栏等，只保留进度条与时间码；`PlayerSeekBar` / `*BottomChrome` 暴露 `onScrubbingChanged` 便于自绘同样行为。播放器尚未 `isInitialized` 时，进度条位置是一条从中心向两侧展开、再淡出循环的加载光条（约 700ms）。缓冲圈（画面中央与下拉刷新）为纯白。
 
 `loadingBuilder` / `errorBuilder` 可替换首屏加载、空列表错误壳。冷启动过久时 `showLoadingPrompt` 只在缓冲指示下显示软提示文案，**不再**当作重试页；硬错误（含超时）才走 retry overlay。
 
@@ -438,7 +455,7 @@ Provide `playUrl` and/or `assets[].url`. HLS URLs containing `/v{n}/index.m3u8` 
 
 **Episode:** `EpisodePlayerChrome`, `EpisodeTopBar`, `EpisodeCenterControl`, `EpisodeSideActions`, `EpisodeBottomChrome`, `EpisodeBoostBadge`
 
-`PlayerSeekBar` supports shimmer while uninitialized, a progress thumb, scrub time labels (`current / total`), and `onScrubbingChanged`.
+`PlayerSeekBar` shows a center-out loading beam while uninitialized, then a progress thumb, scrub time labels (`current / total`), and `onScrubbingChanged`. `EpisodeCenterControl` takes `color` and draws a plain play/pause icon. Gate center glyphs with `videoFrameReady`; for episodes also use `showCenterPause` (tap-to-reveal while playing) and `showCenterPlay` (paused).
 
 ## License
 

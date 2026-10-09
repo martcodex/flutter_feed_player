@@ -250,7 +250,7 @@ class FeedPlayerViewState extends State<FeedPlayerView> {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             const CircularProgressIndicator(
-                              color: Colors.white54,
+                              color: Colors.white,
                             ),
                             if (c.showLoadingPrompt) ...[
                               const SizedBox(height: 14),
