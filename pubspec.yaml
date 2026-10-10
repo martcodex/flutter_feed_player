@@ -2,7 +2,7 @@ name: flutter_feed_player
 description: >-
   Vertical short-video feed and series episode player for Flutter with
   park/promote preloading. No backend required.
-version: 0.1.4
+version: 0.1.5
 homepage: https://github.com/martcodex/flutter_feed_player
 repository: https://github.com/martcodex/flutter_feed_player
 issue_tracker: https://github.com/martcodex/flutter_feed_player/issues
@@ -11,7 +11,13 @@ topics:
   - player
   - feed
   - short-video
-  - flutter
+  - media
+
+screenshots:
+  - description: >-
+      Vertical short-video feed with a butterfly clip, center play button,
+      like and share actions, and a bottom seek bar.
+    path: screenshots/feed_player.jpg
 
 environment:
   sdk: ^3.6.0
