@@ -21,8 +21,7 @@ class SampleClip {
   final String source;
   final String description;
 
-  bool get isHls =>
-      format == 'hls' || url.toLowerCase().contains('.m3u8');
+  bool get isHls => format == 'hls' || url.toLowerCase().contains('.m3u8');
 
   String get formatLabel => MediaFormat.labelFor(
         url: url,
@@ -58,16 +57,13 @@ class MockVideos {
       'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4';
 
   /// Mux Big Buck Bunny adaptive HLS
-  static const muxBunny =
-      'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8';
+  static const muxBunny = 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8';
 
   /// Mux Tears of Steel (ISMC)
-  static const muxTears =
-      'https://test-streams.mux.dev/tos_ismc/main.m3u8';
+  static const muxTears = 'https://test-streams.mux.dev/tos_ismc/main.m3u8';
 
   /// Mux short test stream
-  static const muxTest001 =
-      'https://test-streams.mux.dev/test_001/stream.m3u8';
+  static const muxTest001 = 'https://test-streams.mux.dev/test_001/stream.m3u8';
 
   /// Apple fMP4 advanced example
   static const appleFmp4 =
@@ -410,6 +406,90 @@ class MockFeedData {
 
 /// Mock series — mixes formats when [filter] is [MockFormatFilter.all].
 class MockSeriesData {
+  static const _appleFmp4Base =
+      'https://devstreaming-cdn.apple.com/videos/streaming/examples/img_bipbop_adv_example_fmp4/';
+
+  /// Multiple renditions so the episode player can switch quality.
+  ///
+  /// Apple's advanced fMP4 sample uses real variant playlists. Other clips
+  /// reuse same-format catalog URLs, with the episode URL kept at 720p.
+  static List<EpisodeAsset> _qualityAssets(
+    SampleClip clip,
+    List<SampleClip> pool,
+  ) {
+    if (clip.url == MockVideos.appleFmp4) {
+      return const [
+        EpisodeAsset(
+          assetType: 'hls',
+          quality: '1080p',
+          url: '${_appleFmp4Base}v9/prog_index.m3u8',
+        ),
+        EpisodeAsset(
+          assetType: 'hls',
+          quality: '720p',
+          url: '${_appleFmp4Base}v6/prog_index.m3u8',
+        ),
+        EpisodeAsset(
+          assetType: 'hls',
+          quality: '540p',
+          url: '${_appleFmp4Base}v5/prog_index.m3u8',
+        ),
+        EpisodeAsset(
+          assetType: 'hls',
+          quality: '360p',
+          url: '${_appleFmp4Base}v3/prog_index.m3u8',
+        ),
+        EpisodeAsset(
+          assetType: 'hls',
+          quality: '270p',
+          url: '${_appleFmp4Base}v2/prog_index.m3u8',
+        ),
+      ];
+    }
+
+    final others = <String>[];
+    for (final sample in pool) {
+      if (sample.url == clip.url || others.contains(sample.url)) continue;
+      others.add(sample.url);
+      if (others.length >= 3) break;
+    }
+    if (others.isEmpty) {
+      return [
+        EpisodeAsset(
+          assetType: clip.format,
+          quality: '720p',
+          url: clip.url,
+        ),
+      ];
+    }
+    const extraLabels = ['1080p', '480p', '360p'];
+    return [
+      if (others.isNotEmpty)
+        EpisodeAsset(
+          assetType: clip.format,
+          quality: extraLabels[0],
+          url: others[0],
+        ),
+      EpisodeAsset(
+        assetType: clip.format,
+        quality: '720p',
+        url: clip.url,
+      ),
+      if (others.length > 1)
+        EpisodeAsset(
+          assetType: clip.format,
+          quality: extraLabels[1],
+          url: others[1],
+        ),
+      if (others.length > 2)
+        EpisodeAsset(
+          assetType: clip.format,
+          quality: extraLabels[2],
+          url: others[2],
+        ),
+    ];
+  }
+
   static List<EpisodeItem> _buildEpisodes(
     List<SampleClip> pool, {
     int repeat = 3,
@@ -427,13 +507,7 @@ class MockSeriesData {
           coverUrl: MockVideos.covers[i % MockVideos.covers.length],
           description: expanded[i].description,
           playUrl: expanded[i].url,
-          assets: [
-            EpisodeAsset(
-              assetType: expanded[i].format,
-              quality: '720p',
-              url: expanded[i].url,
-            ),
-          ],
+          assets: _qualityAssets(expanded[i], pool),
         ),
     ];
   }
@@ -452,8 +526,7 @@ class MockSeriesData {
       seriesId: 'mock_ocean_${filter.name}',
       title: 'Ocean Notes ($label)',
       coverUrl: MockVideos.covers.last,
-      description:
-          'Mock series using free public / bundled sample streams. '
+      description: 'Mock series using free public / bundled sample streams. '
           'Swipe vertically between episodes. Pull down to refresh, '
           'pull up on the last episode to load more.',
     );

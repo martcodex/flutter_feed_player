@@ -126,6 +126,9 @@ class _PlayerSeekBarState extends State<PlayerSeekBar>
   /// Shared outer slot so loading shimmer and progress share the same position.
   static const double _slotHeight = 24;
 
+  /// Loading track is a step thinner than the playback bar.
+  double get _loadingHeight => (widget.height - 1).clamp(1.0, widget.height);
+
   Widget _buildLoadingTrack() {
     return SizedBox(
       height: _slotHeight,
@@ -133,7 +136,7 @@ class _PlayerSeekBarState extends State<PlayerSeekBar>
         child: ClipRRect(
           borderRadius: BorderRadius.circular(99),
           child: SizedBox(
-            height: widget.height,
+            height: _loadingHeight,
             width: double.infinity,
             child: ColoredBox(
               color: widget.inactiveColor,

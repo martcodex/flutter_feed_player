@@ -6,6 +6,10 @@ Extracted from production TikTok-style / binge-episode UX patterns (parked contr
 
 ## Demo
 
+Vertical short-video feed: center play button, like and share actions, and a bottom seek bar.
+
+![Vertical short-video feed](screenshots/feed_player.jpg)
+
 Swipe feed, pull-to-refresh, and load-more in the example app:
 
 ![Demo](doc/demo.gif)
@@ -22,7 +26,8 @@ Swipe feed, pull-to-refresh, and load-more in the example app:
 - Adjacent preload with ~2s warm buffer
 - Exclusive unmute (one audible player at a time)
 - Auto-advance to next clip / episode on end (`autoAdvanceOnEnd`; mutually exclusive with effective loop)
-- Tap play/pause, long-press 2×, seek bar with scrub time, speed sheet (episode)
+- Tap play/pause, long-press 2×, seek bar with scrub time, speed and quality sheets (episode)
+- Episode quality: labeled `EpisodeAsset`s, or an HLS master / variant rewrite (`Auto` / `1080p` / `720p` / `480p` / `360p`). A single progressive URL hides the control
 - Episode pause glyph appears on tap while playing, not when a swipe auto-starts
 - Center play/pause stays hidden until the first frame (no overlap with the white buffering spinner)
 - Seek bar shows a center-out loading beam until the player is initialized
@@ -91,7 +96,14 @@ flutter pub get
 | `SeriesInfo` | 剧集元数据 + `episodes` 列表 |
 | `MediaFormat` | 从 URL / `assetType` 推断格式、徽章文案、平台是否可播 |
 
-播放地址解析：`playUrl` 优先；为空则取 `assets` 中第一个非空 `url`。含 `/v{n}/index.m3u8` 的 HLS 地址会在工厂层尽量归一到 `master.m3u8`。
+播放地址由 `PlayerFactory.resolvePlayUrl` 解析（剧集控制器按当前 `quality` 调用）：
+
+| 清晰度 | 解析 |
+|--------|------|
+| `Auto`（或空） | 优先 `playUrl`；为空则取 HLS asset，再退到第一个非空 `assets[].url`。可改写的 HLS 归一到 `master.m3u8` |
+| 命名清晰度（如 `720p`） | 优先匹配同名 `EpisodeAsset.quality`；否则把可改写 HLS 改成 `/v{高度}/index.m3u8` |
+
+可改写 HLS 指路径以 `/master.m3u8` 或 `/v{高度}/index.m3u8` 结尾。选中的 variant 会锁定，工厂不会再把它改回 master。其它地址原样播放。
 
 支持的 URL 形态：
 
@@ -294,6 +306,25 @@ class _SeriesPageState extends State<SeriesPage> {
 }
 ```
 
+默认 `quality` 为 `720p`。`EpisodePlayer` 顶栏在可选项多于一个时显示当前清晰度，点击打开 `showEpisodeQualitySheet`。`setQuality` 保持进度和播放 / 暂停，并丢掉已预热的相邻集，下一集按同一清晰度加载。
+
+| 数据 | 顶栏选项 |
+|------|----------|
+| 两个及以上带 `quality` 的 `EpisodeAsset` | `Auto` + 这些标签（按高度从高到低） |
+| 没有显式多清晰度，但 URL 可改写 | `Auto`、`1080p`、`720p`、`480p`、`360p` |
+| 只有一条渐进式地址 | 不显示清晰度按钮 |
+
+```dart
+EpisodeItem(
+  episodeId: e.id,
+  playUrl: e.masterUrl, // Auto 走这条；可改写时归一到 master.m3u8
+  assets: [
+    EpisodeAsset(assetType: 'hls', quality: '1080p', url: e.url1080),
+    EpisodeAsset(assetType: 'hls', quality: '720p', url: e.url720),
+  ],
+);
+```
+
 ### 5. 选择接入层级
 
 | 需求 | 用法 |
@@ -338,7 +369,7 @@ FeedPlayerView(
 );
 ```
 
-剧集侧同理：用 `EpisodePlayerSlot` + `EpisodeTopBar` / `EpisodeBottomChrome` / `EpisodeCenterControl` 等，或整页换成自己的 UI。
+剧集侧同理：用 `EpisodePlayerSlot` + `EpisodeTopBar` / `EpisodeBottomChrome` / `EpisodeCenterControl` 等，或整页换成自己的 UI。清晰度把 `controller.quality` 和 `onQuality` 传给 `EpisodeTopBar`（选项用 `qualityOptionsFor`，选中后 `setQuality`），或直接调用 `showEpisodeQualitySheet`。
 
 中心播放/暂停：
 
@@ -353,7 +384,7 @@ FeedPlayerView(
 
 `EpisodeCenterControl` 是纯图标（无圆形水波底），颜色用 `color`（默认 `Colors.white70`）。Example 里传 `Colors.white`。
 
-默认 chrome（`FeedPlayerChrome` / `EpisodePlayerChrome`）在 **scrub 拖拽** 时会收起标题、侧栏等，只保留进度条与时间码；`PlayerSeekBar` / `*BottomChrome` 暴露 `onScrubbingChanged` 便于自绘同样行为。播放器尚未 `isInitialized` 时，进度条位置是一条从中心向两侧展开、再淡出循环的加载光条（约 700ms）。缓冲圈（画面中央与下拉刷新）为纯白。
+默认 chrome（`FeedPlayerChrome` / `EpisodePlayerChrome`）在 **scrub 拖拽** 时会收起标题、侧栏等，只保留进度条与时间码；`PlayerSeekBar` / `*BottomChrome` 暴露 `onScrubbingChanged` 便于自绘同样行为。播放器尚未 `isInitialized` 时，进度条位置是一条从中心向两侧展开、再淡出循环的加载光条（约 700ms，比播放轨道细 1px）。缓冲圈（画面中央与下拉刷新）为纯白。
 
 `loadingBuilder` / `errorBuilder` 可替换首屏加载、空列表错误壳。冷启动过久时 `showLoadingPrompt` 只在缓冲指示下显示软提示文案，**不再**当作重试页；硬错误（含超时）才走 retry overlay。
 
@@ -395,6 +426,7 @@ FeedPlayerController(
 - [ ] 选用 `*Player` 或 `*PlayerView` + chrome
 - [ ] 需要鉴权时配置 `headersProvider` / `urlTransformer`
 - [ ] 按需配置 `loopClips` / `autoAdvanceOnEnd`（二者有效互斥）
+- [ ] 多清晰度时填写 `EpisodeAsset.quality`，或提供可改写的 HLS master / variant 地址
 - [ ] 真机验证竖滑、下拉刷新、上拉加载、播完自动下一则、音画互斥
 
 ---
@@ -432,6 +464,8 @@ final controller = EpisodePlayerController(
 EpisodePlayer(controller: controller);
 ```
 
+Default episode quality is `720p`. The top bar shows it when more than one rendition exists. Pass labeled `EpisodeAsset`s, or a convertible HLS URL (`/master.m3u8` / `/v{height}/index.m3u8`). See the integration section above for the option table and `setQuality`.
+
 ## Demo
 
 ```sh
@@ -447,15 +481,15 @@ Example home lists format filters available on the **current platform** (MP4 / H
 FeedItem / EpisodeItem / EpisodeAsset / SeriesInfo / MediaFormat
 ```
 
-Provide `playUrl` and/or `assets[].url`. HLS URLs containing `/v{n}/index.m3u8` are normalized to `master.m3u8` when applicable. `formatLabel` / `isHls` / `isDash` come from `MediaFormat`.
+Provide `playUrl` and/or `assets[].url`. Set `EpisodeAsset.quality` (`1080p`, `720p`, …) when a clip has multiple renditions. Convertible HLS (`/master.m3u8` or `/v{height}/index.m3u8`) can also be rewritten by `HlsQualityUrl`: `Auto` becomes `master.m3u8`, a named quality becomes `/v{height}/index.m3u8`. `formatLabel` / `isHls` / `isDash` come from `MediaFormat`.
 
 ## Public chrome building blocks
 
 **Feed:** `FeedPlayerChrome`, `FeedCenterPlayIcon`, `FeedSideActions` (like / share / more), `FeedBottomChrome`, `FeedActionButton`, `PlayerSeekBar`
 
-**Episode:** `EpisodePlayerChrome`, `EpisodeTopBar`, `EpisodeCenterControl`, `EpisodeSideActions`, `EpisodeBottomChrome`, `EpisodeBoostBadge`
+**Episode:** `EpisodePlayerChrome`, `EpisodeTopBar` (back / title / quality / speed), `EpisodeCenterControl`, `EpisodeSideActions`, `EpisodeBottomChrome`, `EpisodeBoostBadge`, `showEpisodeQualitySheet`, `showEpisodeSpeedSheet`
 
-`PlayerSeekBar` shows a center-out loading beam while uninitialized, then a progress thumb, scrub time labels (`current / total`), and `onScrubbingChanged`. `EpisodeCenterControl` takes `color` and draws a plain play/pause icon. Gate center glyphs with `videoFrameReady`; for episodes also use `showCenterPause` (tap-to-reveal while playing) and `showCenterPlay` (paused).
+`PlayerSeekBar` shows a center-out loading beam while uninitialized (one pixel thinner than the playback track), then a progress thumb, scrub time labels (`current / total`), and `onScrubbingChanged`. `EpisodeCenterControl` takes `color` and draws a plain play/pause icon. Gate center glyphs with `videoFrameReady`; for episodes also use `showCenterPause` (tap-to-reveal while playing) and `showCenterPlay` (paused). Quality labels come from `EpisodePlayerController.qualityOptionsFor`; apply a choice with `setQuality`.
 
 ## License
 

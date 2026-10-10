@@ -15,10 +15,17 @@ class HlsQualityUrl {
   );
   static final RegExp _heightInQuality = RegExp(r'(\d{3,4})');
 
+  /// Renditions offered when a master/variant URL can be rewritten and the
+  /// episode has no explicit [EpisodeAsset.quality] list.
+  static const List<String> renditionLadder = ['1080p', '720p', '480p', '360p'];
+
   static String resolve(String url, String quality) {
     final trimmed = url.trim();
     if (trimmed.isEmpty) return trimmed;
-    return toMaster(trimmed);
+    if (!isConvertible(trimmed)) return trimmed;
+    final height = parseHeight(quality);
+    if (height == null) return toMaster(trimmed);
+    return toVariant(toMaster(trimmed), height);
   }
 
   static bool isAuto(String quality) {
@@ -65,6 +72,9 @@ class HlsQualityUrl {
   static bool isConvertible(String url) {
     return _masterSuffix.hasMatch(url) || _variantSuffix.hasMatch(url);
   }
+
+  /// True for `.../v{height}/index.m3u8` (a locked rendition, not master).
+  static bool isVariant(String url) => _variantSuffix.hasMatch(url);
 
   static bool isHlsPlaylist(String url) {
     return url.toLowerCase().contains('.m3u8');

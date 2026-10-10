@@ -142,8 +142,12 @@ class _DemoEpisodeChromeState extends State<_DemoEpisodeChrome> {
                       ? '${ep.displayLabel} · $pageLabel'
                       : ep.displayLabel,
                   speed: c.playbackSpeed,
+                  quality: c.quality,
                   onBack: widget.onBack,
                   onSpeed: () => showEpisodeSpeedSheet(context, c),
+                  onQuality: c.qualityOptionsFor(ep).length > 1
+                      ? () => showEpisodeQualitySheet(context, c, ep)
+                      : null,
                 ),
                 EpisodeSideActions(
                   onEpisodes: () => showEpisodeListSheet(context),
@@ -157,9 +161,8 @@ class _DemoEpisodeChromeState extends State<_DemoEpisodeChrome> {
           EpisodeBottomChrome(
             title: series.title,
             episodeTitle: ep.title.isNotEmpty ? ep.title : ep.displayLabel,
-            description: ep.description.isNotEmpty
-                ? ep.description
-                : series.description,
+            description:
+                ep.description.isNotEmpty ? ep.description : series.description,
             seekController: widget.slot.player,
             onSeekStart: c.revealChrome,
             onScrubbingChanged: (v) => setState(() => _scrubbing = v),

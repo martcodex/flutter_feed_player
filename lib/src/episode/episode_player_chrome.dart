@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 
 import '../core/episode_playback_strategy.dart';
+import '../core/player_factory.dart';
+import '../models/playable_models.dart';
 import '../widgets/player_seek_bar.dart';
 import 'episode_player_controller.dart';
 import 'episode_player_view.dart';
@@ -77,8 +79,12 @@ class _EpisodePlayerChromeState extends State<EpisodePlayerChrome> {
                     topPad: topPad,
                     label: ep.displayLabel,
                     speed: c.playbackSpeed,
+                    quality: c.quality,
                     onBack: widget.onBack ?? () => Navigator.maybePop(context),
                     onSpeed: () => showEpisodeSpeedSheet(context, c),
+                    onQuality: c.qualityOptionsFor(ep).length > 1
+                        ? () => showEpisodeQualitySheet(context, c, ep)
+                        : null,
                   ),
                 if (widget.showSideActions)
                   EpisodeSideActions(
@@ -94,9 +100,8 @@ class _EpisodePlayerChromeState extends State<EpisodePlayerChrome> {
           EpisodeBottomChrome(
             title: series.title,
             episodeTitle: ep.title.isNotEmpty ? ep.title : ep.displayLabel,
-            description: ep.description.isNotEmpty
-                ? ep.description
-                : series.description,
+            description:
+                ep.description.isNotEmpty ? ep.description : series.description,
             seekController: slot.player,
             onSeekStart: c.revealChrome,
             onScrubbingChanged: (v) => setState(() => _scrubbing = v),
@@ -203,7 +208,7 @@ class EpisodeBoostBadge extends StatelessWidget {
   }
 }
 
-/// Back / title / speed row.
+/// Back / title / quality / speed row.
 class EpisodeTopBar extends StatelessWidget {
   const EpisodeTopBar({
     super.key,
@@ -212,6 +217,8 @@ class EpisodeTopBar extends StatelessWidget {
     required this.speed,
     required this.onBack,
     required this.onSpeed,
+    this.quality,
+    this.onQuality,
   });
 
   final double topPad;
@@ -219,6 +226,12 @@ class EpisodeTopBar extends StatelessWidget {
   final double speed;
   final VoidCallback onBack;
   final VoidCallback onSpeed;
+
+  /// Current rendition label, e.g. `720p` or `Auto`. Hidden when null.
+  final String? quality;
+
+  /// Opens the quality sheet. Hidden when null (single-URL clips).
+  final VoidCallback? onQuality;
 
   @override
   Widget build(BuildContext context) {
@@ -232,15 +245,26 @@ class EpisodeTopBar extends StatelessWidget {
             onPressed: onBack,
             icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white),
           ),
-          Text(
-            label,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
+          Expanded(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
-          const Spacer(),
+          if (quality != null && onQuality != null)
+            TextButton(
+              onPressed: onQuality,
+              child: Text(
+                quality!,
+                style: const TextStyle(color: Colors.white),
+              ),
+            ),
           TextButton(
             onPressed: onSpeed,
             child: Text(
@@ -383,13 +407,15 @@ class _EpisodeBottomChromeState extends State<EpisodeBottomChrome> {
                     const SizedBox(height: 4),
                     Text(
                       widget.episodeTitle,
-                      style: const TextStyle(color: Colors.white70, fontSize: 13),
+                      style:
+                          const TextStyle(color: Colors.white70, fontSize: 13),
                     ),
                     if (desc.isNotEmpty) ...[
                       const SizedBox(height: 6),
                       Text(
                         desc,
-                        style: const TextStyle(color: Colors.white60, fontSize: 12),
+                        style: const TextStyle(
+                            color: Colors.white60, fontSize: 12),
                       ),
                     ],
                   ],
@@ -458,6 +484,51 @@ Future<void> showEpisodeSpeedSheet(
   );
   if (selected != null) {
     await controller.setSpeed(selected);
+  }
+}
+
+/// Modal quality picker; applies selection via [EpisodePlayerController.setQuality].
+Future<void> showEpisodeQualitySheet(
+  BuildContext context,
+  EpisodePlayerController controller,
+  EpisodeItem episode,
+) async {
+  final options = controller.qualityOptionsFor(episode);
+  if (options.length < 2) return;
+  final selected = await showModalBottomSheet<String>(
+    context: context,
+    backgroundColor: const Color(0xFF1C1C1E),
+    builder: (ctx) {
+      return SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: Text(
+                'Quality',
+                style: TextStyle(color: Colors.white, fontSize: 16),
+              ),
+            ),
+            for (final q in options)
+              ListTile(
+                title: Text(
+                  q,
+                  style: TextStyle(
+                    color: PlayerFactory.sameQuality(q, controller.quality)
+                        ? Colors.amber
+                        : Colors.white,
+                  ),
+                ),
+                onTap: () => Navigator.pop(ctx, q),
+              ),
+          ],
+        ),
+      );
+    },
+  );
+  if (selected != null) {
+    await controller.setQuality(selected);
   }
 }
 

@@ -1,3 +1,23 @@
+## 0.1.6
+
+* Episode quality: the top bar shows the current rendition and opens
+  `showEpisodeQualitySheet` when more than one option exists.
+  `EpisodePlayerController.setQuality` reloads the active episode at the same
+  playhead (and keeps play / pause) and drops parked neighbors so the next
+  swipe uses the same quality. Default quality is `720p`.
+* Options come from labeled `EpisodeAsset`s (`Auto` plus two or more
+  qualities). A single progressive URL hides the control. Convertible HLS
+  (`/master.m3u8` or `/v{height}/index.m3u8`) without an explicit ladder
+  offers `Auto`, `1080p`, `720p`, `480p`, and `360p`.
+* `Auto` prefers `playUrl` and normalizes convertible HLS to `master.m3u8`.
+  A named quality uses the matching asset, or rewrites convertible HLS to
+  `/v{height}/index.m3u8`. Variant playlists stay locked and are not rewritten
+  back to master. Park / promote reuse is same-quality only.
+* Seek bar: the uninitialized loading beam is one pixel thinner than the
+  playback track.
+* Add a pub.dev screenshot of the vertical feed (`screenshots/feed_player.jpg`).
+* Replace the `flutter` topic with `media`.
+
 ## 0.1.5
 
 * Seek bar: before the player is initialized, the track shows a center-out

@@ -5,6 +5,7 @@ import 'package:video_player/video_player.dart';
 
 import '../core/episode_playback_strategy.dart';
 import '../core/feed_playback_strategy.dart';
+import '../core/hls_quality_url.dart';
 import '../core/playback_audio.dart';
 import '../core/player_cache.dart';
 import '../core/player_factory.dart';
@@ -69,6 +70,7 @@ class EpisodePlayerController extends ChangeNotifier {
   int parkedVersion = 0;
   int switchSeq = 0;
   int episodeRevision = 0;
+  int _qualityEpoch = 0;
 
   VoidCallback? _playerListener;
   Timer? _hideChromeTimer;
@@ -84,6 +86,15 @@ class EpisodePlayerController extends ChangeNotifier {
   Future<void> Function(int index)? animateToIndex;
 
   List<EpisodeItem> get episodes => series?.episodes ?? const [];
+
+  /// Quality labels for [episode], including `Auto` when more than one
+  /// rendition exists. Empty when the clip has a single URL.
+  List<String> qualityOptionsFor(EpisodeItem episode) {
+    return PlayerFactory.qualityOptionsFor(
+      playUrl: episode.playUrl,
+      assets: episode.assets,
+    );
+  }
 
   bool get locksForwardSwipe {
     if (!lockForwardWhileCold) return false;
@@ -207,9 +218,7 @@ class EpisodePlayerController extends ChangeNotifier {
     final ids = <String>{
       if (activeEpisodeId != null) activeEpisodeId!,
       for (var i = 0; i < episodes.length; i++)
-        episodes[i].episodeId.isNotEmpty
-            ? episodes[i].episodeId
-            : 'ep_$i',
+        episodes[i].episodeId.isNotEmpty ? episodes[i].episodeId : 'ep_$i',
     };
     if (player != null) {
       PlaybackAudio.release(player!);
@@ -230,9 +239,32 @@ class EpisodePlayerController extends ChangeNotifier {
     parkedVersion++;
   }
 
+  /// Switch rendition for the active episode and keep the playhead.
+  ///
+  /// Parked neighbors are dropped so the next swipe loads the same quality.
+  Future<void> setQuality(String next) async {
+    final value = next.trim();
+    if (value.isEmpty || PlayerFactory.sameQuality(value, quality)) return;
+    final wasPlaying = player?.value.isPlaying ?? false;
+    final position = player?.value.position ?? Duration.zero;
+    quality = value;
+    _qualityEpoch++;
+    _discardActivePlayer();
+    _discardParkedEpisodes();
+    notifyListeners();
+    if (_disposed || episodes.isEmpty) return;
+    await switchEpisode(
+      currentIndex,
+      resumePosition: position,
+      autoplay: wasPlaying,
+    );
+  }
+
   Future<void> switchEpisode(
     int index, {
     bool restartFromStart = false,
+    Duration? resumePosition,
+    bool autoplay = true,
   }) async {
     if (_disposed || index < 0 || index >= episodes.length) return;
     final seq = ++switchSeq;
@@ -252,21 +284,31 @@ class EpisodePlayerController extends ChangeNotifier {
 
     _parkActive(exceptId: episodeId);
 
-    // Try promote from process cache.
+    final resume =
+        restartFromStart ? null : (resumePosition ?? ep.startPosition);
+
+    // Try promote from process cache (same quality only).
     final cached = PlayerCache.takeEntry(episodeId);
-    if (cached != null &&
-        FeedPlaybackStrategy.isReusablePlayer(cached.controller)) {
-      await _attachActive(
-        cached.controller,
-        episodeId: episodeId,
-        url: cached.url,
-        quality: cached.quality,
-        seq: seq,
-        restartFromStart: restartFromStart,
-        resume: restartFromStart ? null : ep.startPosition,
-      );
-      _scheduleAdjacentPreload(index);
-      return;
+    if (cached != null) {
+      final reusable =
+          FeedPlaybackStrategy.isReusablePlayer(cached.controller) &&
+              PlayerFactory.sameQuality(cached.quality, quality);
+      if (reusable) {
+        await _attachActive(
+          cached.controller,
+          episodeId: episodeId,
+          url: cached.url,
+          quality: cached.quality,
+          seq: seq,
+          restartFromStart: restartFromStart,
+          resume: resume,
+          autoplay: autoplay,
+        );
+        _scheduleAdjacentPreload(index);
+        return;
+      }
+      PlaybackAudio.release(cached.controller);
+      cached.controller.dispose();
     }
 
     final url = PlayerFactory.resolvePlayUrl(
@@ -289,6 +331,7 @@ class EpisodePlayerController extends ChangeNotifier {
     final ctrl = PlayerFactory.create(
       url,
       allowBackgroundPlayback: allowBackgroundPlayback,
+      preserveHlsVariant: HlsQualityUrl.isVariant(url),
       headersProvider: headersProvider,
       urlTransformer: urlTransformer,
     );
@@ -323,7 +366,8 @@ class EpisodePlayerController extends ChangeNotifier {
       quality: quality,
       seq: seq,
       restartFromStart: restartFromStart,
-      resume: restartFromStart ? null : ep.startPosition,
+      resume: resume,
+      autoplay: autoplay,
     );
     _scheduleAdjacentPreload(index);
   }
@@ -336,6 +380,7 @@ class EpisodePlayerController extends ChangeNotifier {
     required int seq,
     required bool restartFromStart,
     Duration? resume,
+    bool autoplay = true,
   }) async {
     if (seq != switchSeq || _disposed) {
       PlayerCache.put(
@@ -395,14 +440,22 @@ class EpisodePlayerController extends ChangeNotifier {
           await ctrl.seekTo(Duration.zero);
         }
       } else if (resume != null && resume > Duration.zero) {
-        await ctrl.seekTo(resume);
+        final dur = ctrl.value.duration;
+        final target = dur > Duration.zero && resume > dur ? dur : resume;
+        await ctrl.seekTo(target);
       }
       await ctrl.setLooping(false);
       await ctrl.setPlaybackSpeed(isBoosting ? 2.0 : playbackSpeed);
     } catch (_) {}
 
     if (seq != switchSeq) return;
-    await _kickoff();
+    if (autoplay) {
+      await _kickoff();
+    } else {
+      isPlaying = false;
+      showCenterPlay = true;
+      notifyListeners();
+    }
     _armChromeHide();
     if (playerReady && videoFrameReady) {
       _cancelColdStartTimers();
@@ -536,10 +589,38 @@ class EpisodePlayerController extends ChangeNotifier {
     notifyListeners();
   }
 
+  void _discardActivePlayer() {
+    _cancelColdStartTimers();
+    _detachListener();
+    final ctrl = player;
+    if (ctrl != null) {
+      PlaybackAudio.release(ctrl);
+      ctrl.dispose();
+    }
+    player = null;
+    activeEpisodeId = null;
+    playerReady = false;
+    videoFrameReady = false;
+    isPlaying = false;
+    parkedVersion++;
+  }
+
+  void _discardParkedEpisodes() {
+    for (var i = 0; i < episodes.length; i++) {
+      final id =
+          episodes[i].episodeId.isNotEmpty ? episodes[i].episodeId : 'ep_$i';
+      final taken = PlayerCache.takeEntry(id);
+      if (taken == null) continue;
+      PlaybackAudio.release(taken.controller);
+      taken.controller.dispose();
+    }
+  }
+
   void _scheduleAdjacentPreload(int index) {
+    final epoch = _qualityEpoch;
     unawaited(() async {
       await Future<void>.delayed(EpisodePlaybackStrategy.preloadStartDelay);
-      if (_disposed) return;
+      if (_disposed || epoch != _qualityEpoch) return;
       final targets = <int>[];
       for (var i = 1; i <= EpisodePlaybackStrategy.preloadAhead; i++) {
         targets.add(index + i);
@@ -552,7 +633,16 @@ class EpisodePlayerController extends ChangeNotifier {
         final ep = episodes[i];
         final episodeId = ep.episodeId.isNotEmpty ? ep.episodeId : 'ep_$i';
         if (episodeId == activeEpisodeId) continue;
-        if (PlayerCache.peek(episodeId) != null) continue;
+        if (epoch != _qualityEpoch) return;
+        final parked = PlayerCache.peekEntry(episodeId);
+        if (parked != null) {
+          if (PlayerFactory.sameQuality(parked.quality, quality)) continue;
+          final taken = PlayerCache.takeEntry(episodeId);
+          if (taken != null) {
+            PlaybackAudio.release(taken.controller);
+            taken.controller.dispose();
+          }
+        }
 
         final url = PlayerFactory.resolvePlayUrl(
           playUrl: ep.playUrl,
@@ -564,6 +654,7 @@ class EpisodePlayerController extends ChangeNotifier {
         final ctrl = PlayerFactory.create(
           url,
           allowBackgroundPlayback: allowBackgroundPlayback,
+          preserveHlsVariant: HlsQualityUrl.isVariant(url),
           headersProvider: headersProvider,
           urlTransformer: urlTransformer,
         );
@@ -574,9 +665,14 @@ class EpisodePlayerController extends ChangeNotifier {
           );
           await FeedPlaybackStrategy.warmFirstSeconds(
             ctrl,
-            shouldAbort: () => _disposed || activeEpisodeId == episodeId,
+            shouldAbort: () =>
+                _disposed ||
+                epoch != _qualityEpoch ||
+                activeEpisodeId == episodeId,
           );
-          if (_disposed || activeEpisodeId == episodeId) {
+          if (_disposed ||
+              epoch != _qualityEpoch ||
+              activeEpisodeId == episodeId) {
             PlaybackAudio.release(ctrl);
             ctrl.dispose();
             continue;

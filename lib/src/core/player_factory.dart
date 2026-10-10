@@ -98,6 +98,7 @@ class PlayerFactory {
     required bool allowBackgroundPlayback,
     bool mixWithOthers = false,
     bool bustAssetCache = false,
+    bool preserveHlsVariant = false,
     HttpHeadersProvider? headersProvider,
     UrlTransformer? urlTransformer,
     VideoViewType viewType = VideoViewType.textureView,
@@ -124,6 +125,7 @@ class PlayerFactory {
       allowBackgroundPlayback: allowBackgroundPlayback,
       mixWithOthers: mixWithOthers,
       bustAssetCache: bustAssetCache,
+      preserveHlsVariant: preserveHlsVariant,
       headersProvider: headersProvider,
       urlTransformer: null, // already applied
       viewType: viewType,
@@ -155,12 +157,13 @@ class PlayerFactory {
     required bool allowBackgroundPlayback,
     bool mixWithOthers = false,
     bool bustAssetCache = false,
+    bool preserveHlsVariant = false,
     HttpHeadersProvider? headersProvider,
     UrlTransformer? urlTransformer,
     VideoViewType viewType = VideoViewType.textureView,
   }) {
     var trimmed = (urlTransformer?.call(url.trim()) ?? url).trim();
-    if (HlsQualityUrl.isConvertible(trimmed)) {
+    if (!preserveHlsVariant && HlsQualityUrl.isConvertible(trimmed)) {
       trimmed = HlsQualityUrl.toMaster(trimmed);
     }
     if (bustAssetCache) {
@@ -201,7 +204,58 @@ class PlayerFactory {
     );
   }
 
-  /// Resolve best playable URL from assets (prefer HLS master).
+  static bool sameQuality(String a, String b) =>
+      a.trim().toLowerCase() == b.trim().toLowerCase();
+
+  /// Labels for the quality sheet: `Auto` plus explicit assets, or the HLS
+  /// rendition ladder when the URL uses `/master.m3u8` / `/v{n}/index.m3u8`.
+  ///
+  /// A single progressive file returns an empty list (nothing to switch).
+  static List<String> qualityOptionsFor({
+    required String playUrl,
+    required List<EpisodeAsset> assets,
+  }) {
+    final labeled = <String>[];
+    final seen = <String>{};
+    for (final asset in assets) {
+      final q = asset.quality.trim();
+      if (q.isEmpty || asset.url.trim().isEmpty) continue;
+      if (HlsQualityUrl.isAuto(q)) continue;
+      if (seen.add(q.toLowerCase())) labeled.add(q);
+    }
+    labeled.sort((a, b) {
+      final ha = HlsQualityUrl.parseHeight(a);
+      final hb = HlsQualityUrl.parseHeight(b);
+      if (ha != null && hb != null) return hb.compareTo(ha);
+      if (ha != null) return -1;
+      if (hb != null) return 1;
+      return 0;
+    });
+    if (labeled.length >= 2) {
+      return ['Auto', ...labeled];
+    }
+
+    var raw = playUrl.trim();
+    if (raw.isEmpty) {
+      for (final asset in assets) {
+        final u = asset.url.trim();
+        if (u.isNotEmpty) {
+          raw = u;
+          break;
+        }
+      }
+    }
+    if (raw.isNotEmpty && HlsQualityUrl.isConvertible(raw)) {
+      return ['Auto', ...HlsQualityUrl.renditionLadder];
+    }
+    return const [];
+  }
+
+  /// Resolve best playable URL from assets.
+  ///
+  /// `Auto` prefers [playUrl] and normalizes convertible HLS to `master.m3u8`.
+  /// A named quality uses the matching [EpisodeAsset], or rewrites a
+  /// convertible HLS URL to `/v{height}/index.m3u8`.
   static String resolvePlayUrl({
     required String playUrl,
     required List<EpisodeAsset> assets,
@@ -217,20 +271,21 @@ class PlayerFactory {
     }
 
     EpisodeAsset? pickByQuality(String q) {
-      final target = q.trim().toLowerCase();
-      if (target.isEmpty || target == 'auto') return null;
+      if (HlsQualityUrl.isAuto(q)) return null;
       for (final a in assets) {
         if (a.url.trim().isEmpty) continue;
-        if (a.quality.trim().toLowerCase() == target) return a;
+        if (sameQuality(a.quality, q)) return a;
       }
       return null;
     }
 
-    final byQ = pickByQuality(quality);
+    final matched = pickByQuality(quality);
+    if (matched != null) return matched.url.trim();
+
     final hls = pickHls();
     var raw = playUrl.trim();
     if (raw.isEmpty) {
-      raw = (hls ?? byQ)?.url.trim() ?? '';
+      raw = hls?.url.trim() ?? '';
     }
     if (raw.isEmpty) {
       for (final a in assets) {
@@ -243,7 +298,7 @@ class PlayerFactory {
     }
     if (raw.isEmpty) return '';
     if (HlsQualityUrl.isConvertible(raw)) {
-      raw = HlsQualityUrl.toMaster(raw);
+      raw = HlsQualityUrl.resolve(raw, quality);
     }
     return raw;
   }

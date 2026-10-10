@@ -28,6 +28,68 @@ void main() {
     );
   });
 
+  test('resolvePlayUrl honors quality assets and HLS variants', () {
+    const assets = [
+      EpisodeAsset(
+        quality: '720p',
+        url: 'https://cdn.example/720.mp4',
+        assetType: 'mp4',
+      ),
+      EpisodeAsset(
+        quality: '480p',
+        url: 'https://cdn.example/480.mp4',
+        assetType: 'mp4',
+      ),
+    ];
+    expect(
+      PlayerFactory.resolvePlayUrl(
+        playUrl: 'https://cdn.example/master.mp4',
+        assets: assets,
+        quality: '480p',
+      ),
+      'https://cdn.example/480.mp4',
+    );
+    expect(
+      PlayerFactory.resolvePlayUrl(
+        playUrl: 'https://cdn.example/v720/index.m3u8',
+        assets: const [],
+        quality: 'Auto',
+      ),
+      'https://cdn.example/master.m3u8',
+    );
+    expect(
+      PlayerFactory.resolvePlayUrl(
+        playUrl: 'https://cdn.example/master.m3u8',
+        assets: const [],
+        quality: '480p',
+      ),
+      'https://cdn.example/v480/index.m3u8',
+    );
+    expect(
+      PlayerFactory.qualityOptionsFor(
+        playUrl: 'https://cdn.example/a.mp4',
+        assets: assets,
+      ),
+      ['Auto', '720p', '480p'],
+    );
+    expect(
+      PlayerFactory.qualityOptionsFor(
+        playUrl: 'https://cdn.example/a.mp4',
+        assets: const [
+          EpisodeAsset(quality: '720p', url: 'https://cdn.example/a.mp4'),
+        ],
+      ),
+      isEmpty,
+    );
+    expect(
+      PlayerFactory.qualityOptionsFor(
+        playUrl: 'https://cdn.example/master.m3u8',
+        assets: const [],
+      ),
+      ['Auto', ...HlsQualityUrl.renditionLadder],
+    );
+  });
+
   test('EpisodeItem formatLabel detects common formats', () {
     const hls = EpisodeItem(
       playUrl: 'https://example.com/master.m3u8',
