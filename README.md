@@ -36,6 +36,7 @@ Swipe feed, pull-to-refresh, and load-more in the example app:
 - Multi-format playback: MP4 / HLS / MOV / M4V / WebM / DASH (platform-dependent)
 - Network, Flutter asset (`asset://…`), and local `file:` URLs via `PlayerFactory.create`
 - Optional `HttpHeadersProvider` / `UrlTransformer` for CDN auth
+- Picture-in-picture (`enablePictureInPicture`): a playing clip opens the system window on background; a paused clip does not. The active page stays pinned across that resize
 
 Player core and UI components are separated: keep the view, swap chrome via `overlayBuilder`.
 
@@ -192,6 +193,7 @@ class _FeedPageState extends State<FeedPage> {
       loopClips: true,              // 仅当 autoAdvanceOnEnd == false 时生效
       autoAdvanceOnEnd: false,      // false + loopClips → 单卡循环
       lockForwardWhileCold: false,  // HLS 冷启动时建议保持 false
+      enablePictureInPicture: false, // 播放中进后台出系统小窗，见「画中画」
       // headersProvider / urlTransformer — 见下文 CDN
     );
   }
@@ -282,6 +284,7 @@ class _SeriesPageState extends State<SeriesPage> {
       lockForwardWhileCold: false,
       // 默认 true：播完自动滑到下一集；末页会先 loadMore
       autoAdvanceOnEnd: true,
+      enablePictureInPicture: false, // 播放中进后台出系统小窗，见「画中画」
     );
   }
 
@@ -408,12 +411,71 @@ FeedPlayerController(
 ### 7. 生命周期与其它约定
 
 - **必须**在宿主 `State.dispose` 中调用 `controller.dispose()`，释放 parked / active 播放器。
-- 页面不可见时，View 会配合暂停；需要后台播放可设 `allowBackgroundPlayback: true`（慎用）。
+- 页面不可见时，View 会配合暂停；需要后台播放可设 `allowBackgroundPlayback: true`（慎用）。画中画会自行让当前播放器在后台继续播，不必再单独打开这个开关。
+- 画中画见下一小节。默认 `enablePictureInPicture: false`。
 - Demo 在 `main` 里调用了 `PlaybackMemory.init()`（记忆进度）；宿主按需同样初始化。
 - `FeedItem.identity` / `episodeId` 尽量稳定唯一，便于 park 缓存命中。
 - 从 Feed 进剧集：在 `onWatchFullSeries` 里 `Navigator.push` 打开带同一 `seriesId` 的 `EpisodePlayer`。
 - WebM / DASH 在 iOS/macOS 不可播；可用 `MediaFormat` 过滤列表或展示 `unsupportedReason`。
 - View 会绑定 `controller.animateToIndex`，供 `autoAdvanceOnEnd` 驱动 `PageView` 动画；自建列表时需自行赋值。
+
+#### 画中画（Picture-in-picture）
+
+`FeedPlayerController` / `EpisodePlayerController` 设 `enablePictureInPicture: true`。正在播放、且用户没有暂停时进入后台，系统会出小窗；已暂停则不会。小窗期间 `inPictureInPicture` 为 true，默认 View 会收起手势、缓冲圈和 chrome。回到前台后停在当前页。
+
+进入后台或窗口明显缩放时会钉住当前页，避免 `PageView` 被滑到下一条；这段时间也会暂停自动下一则。通知栏、控制中心不会出小窗。
+
+开启画中画后，当前播放器按可后台播放创建。iOS 会改用 `VideoViewType.platformView`（系统画中画要绑到屏幕上的 `AVPlayerLayer`），画面铺满页面。Web / 桌面没有系统小窗，相关调用会被忽略。
+
+包内带 Android / iOS 插件 `FlutterFeedPlayerPlugin`，`flutter pub get` 后会注册。宿主还要完成下面的平台配置。Example 已接好。
+
+**Android（8.0+；自动进入需要 12+）**
+
+Activity 声明：
+
+```xml
+android:supportsPictureInPicture="true"
+android:resizeableActivity="true"
+android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+```
+
+`configChanges` 里要有 `screenSize` 和 `smallestScreenSize`，否则进小窗会重建 Activity。
+
+把离开应用和画中画状态转发给插件。12 以下靠 `onUserLeaveHint` 进入；12 及以上由系统在真正离开应用时自动进入。
+
+```kotlin
+import android.content.res.Configuration
+import dev.martcodex.flutter_feed_player.FlutterFeedPlayerPlugin
+import io.flutter.embedding.android.FlutterActivity
+
+class MainActivity : FlutterActivity() {
+    override fun onUserLeaveHint() {
+        FlutterFeedPlayerPlugin.onUserLeaveHint()
+        super.onUserLeaveHint()
+    }
+
+    override fun onPictureInPictureModeChanged(
+        isInPictureInPictureMode: Boolean,
+        newConfig: Configuration,
+    ) {
+        FlutterFeedPlayerPlugin.onPipModeChanged(isInPictureInPictureMode)
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+    }
+}
+```
+
+**iOS**
+
+`Info.plist` 增加后台音频模式（Xcode 里即 Audio, AirPlay, and Picture in Picture）：
+
+```xml
+<key>UIBackgroundModes</key>
+<array>
+    <string>audio</string>
+</array>
+```
+
+插件会在当前画面的 `AVPlayerLayer` 上武装自动画中画，真正进入后台时才出窗。
 
 ### 8. 接入检查清单
 
@@ -427,6 +489,7 @@ FeedPlayerController(
 - [ ] 需要鉴权时配置 `headersProvider` / `urlTransformer`
 - [ ] 按需配置 `loopClips` / `autoAdvanceOnEnd`（二者有效互斥）
 - [ ] 多清晰度时填写 `EpisodeAsset.quality`，或提供可改写的 HLS master / variant 地址
+- [ ] 需要画中画时设 `enablePictureInPicture`，并完成 Android Activity / iOS `UIBackgroundModes` 配置
 - [ ] 真机验证竖滑、下拉刷新、上拉加载、播完自动下一则、音画互斥
 
 ---
@@ -441,6 +504,7 @@ final controller = FeedPlayerController(
   },
   // Defaults: autoAdvanceOnEnd: true. For looping shorts:
   // loopClips: true, autoAdvanceOnEnd: false,
+  // enablePictureInPicture: true, // host setup required — see README
 );
 
 FeedPlayer(
@@ -459,6 +523,7 @@ final controller = EpisodePlayerController(
   pageSize: 10,
   initialEpisodeNo: 1,
   // autoAdvanceOnEnd: true (default) — binge to next episode
+  // enablePictureInPicture: true, // host setup required — see README
 );
 
 EpisodePlayer(controller: controller);
@@ -473,7 +538,7 @@ cd example
 flutter run
 ```
 
-Example home lists format filters available on the **current platform** (MP4 / HLS / MOV / M4V; plus WebM / DASH where supported). Samples include public network streams and a bundled WebM under `asset://assets/videos/…`. Demo pages expose grouped playback toggles (gestures, pull refresh/load-more, lock-forward, loop, auto-advance) and compose chrome via `overlayBuilder`.
+Example home lists format filters available on the **current platform** (MP4 / HLS / MOV / M4V; plus WebM / DASH where supported). Samples include public network streams and a bundled WebM under `asset://assets/videos/…`. Demo pages expose grouped playback toggles (gestures, pull refresh/load-more, lock-forward, loop, auto-advance, picture-in-picture) and compose chrome via `overlayBuilder`. The example Android activity and iOS `Info.plist` already include the picture-in-picture host setup.
 
 ## Models
 

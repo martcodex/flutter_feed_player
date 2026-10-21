@@ -44,6 +44,7 @@ class _FeedDemoPageState extends State<FeedDemoPage> {
       loopClips: p.loopClips,
       lockForwardWhileCold: p.lockForwardWhileCold,
       autoAdvanceOnEnd: p.autoAdvanceOnEnd,
+      enablePictureInPicture: p.enablePictureInPicture,
     );
   }
 

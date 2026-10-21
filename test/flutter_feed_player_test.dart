@@ -1,8 +1,96 @@
+import 'package:flutter/painting.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_feed_player/flutter_feed_player.dart';
+import 'package:flutter_feed_player/src/core/playback_pip.dart';
 import 'package:video_player/video_player.dart';
 
 void main() {
+  test('picture in picture only while playback is running', () {
+    expect(
+      PlaybackPip.shouldEnter(enabled: true, playing: true, userPaused: false),
+      isTrue,
+    );
+    expect(
+      PlaybackPip.shouldEnter(enabled: true, playing: false, userPaused: true),
+      isFalse,
+    );
+    expect(
+      PlaybackPip.shouldEnter(enabled: true, playing: true, userPaused: true),
+      isFalse,
+    );
+    expect(
+      PlaybackPip.shouldEnter(
+        enabled: false,
+        playing: true,
+        userPaused: false,
+      ),
+      isFalse,
+    );
+  });
+
+  test('only a large window resize pins the page', () {
+    expect(
+      PlaybackPip.sizeChangeShouldPin(
+        const Size(1080, 2400),
+        const Size(1080, 2400),
+      ),
+      isFalse,
+    );
+    expect(
+      PlaybackPip.sizeChangeShouldPin(
+        const Size(1080, 2400),
+        const Size(1080, 2300),
+      ),
+      isFalse,
+    );
+    expect(
+      PlaybackPip.sizeChangeShouldPin(
+        const Size(1080, 2400),
+        const Size(480, 640),
+      ),
+      isTrue,
+    );
+    expect(
+      PlaybackPip.sizeChangeShouldPin(Size.zero, const Size(1080, 2400)),
+      isFalse,
+    );
+  });
+
+  test('background page changes are ignored', () {
+    expect(
+      PlaybackPip.shouldIgnorePageChange(
+        programmatic: false,
+        blockPaging: false,
+        lifecycleResumed: false,
+      ),
+      isTrue,
+    );
+    expect(
+      PlaybackPip.shouldIgnorePageChange(
+        programmatic: true,
+        blockPaging: true,
+        lifecycleResumed: false,
+      ),
+      isTrue,
+    );
+    expect(
+      PlaybackPip.shouldIgnorePageChange(
+        programmatic: true,
+        blockPaging: true,
+        lifecycleResumed: true,
+      ),
+      isFalse,
+    );
+    expect(
+      PlaybackPip.shouldIgnorePageChange(
+        programmatic: false,
+        blockPaging: true,
+        lifecycleResumed: true,
+      ),
+      isTrue,
+    );
+  });
+
   test('FeedItem identity prefers id', () {
     const item = FeedItem(
       id: 'a',

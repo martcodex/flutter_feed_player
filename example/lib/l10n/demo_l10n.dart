@@ -216,6 +216,19 @@ class DemoL10n {
         DemoLang.ja => 'フィード',
       };
 
+  String get paramPip => switch (lang) {
+        DemoLang.zh => '画中画',
+        DemoLang.en => 'Picture in picture',
+        DemoLang.ja => 'ピクチャーインピクチャー',
+      };
+
+  String get paramPipHint => switch (lang) {
+        DemoLang.zh => '正在播放时进入后台显示小窗；暂停时不显示',
+        DemoLang.en =>
+          'Small window when a playing video backgrounds; hidden if paused',
+        DemoLang.ja => '再生中にバックグラウンドへ移ると小窓。一時停止中は出さない',
+      };
+
   String get paramGroupPlayback => switch (lang) {
         DemoLang.zh => '播放行为',
         DemoLang.en => 'Playback',

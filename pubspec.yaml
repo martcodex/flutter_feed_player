@@ -35,3 +35,10 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  plugin:
+    platforms:
+      android:
+        package: dev.martcodex.flutter_feed_player
+        pluginClass: FlutterFeedPlayerPlugin
+      ios:
+        pluginClass: FlutterFeedPlayerPlugin

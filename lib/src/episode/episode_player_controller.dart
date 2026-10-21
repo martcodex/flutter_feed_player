@@ -27,6 +27,10 @@ class EpisodePlayerController extends ChangeNotifier {
     this.headersProvider,
     this.urlTransformer,
     this.allowBackgroundPlayback = false,
+
+    /// System picture-in-picture when a **playing** episode backgrounds.
+    /// Paused episodes do not open a window. See README for host setup.
+    this.enablePictureInPicture = false,
     this.lockForwardWhileCold = false,
     this.autoAdvanceOnEnd = true,
     this.pageSize = 10,
@@ -38,6 +42,10 @@ class EpisodePlayerController extends ChangeNotifier {
   final HttpHeadersProvider? headersProvider;
   final UrlTransformer? urlTransformer;
   final bool allowBackgroundPlayback;
+
+  /// When true, backing out of the app while this episode is playing may show
+  /// a system picture-in-picture window. A user pause does not.
+  final bool enablePictureInPicture;
   bool lockForwardWhileCold;
 
   /// When true, slide to the next episode after the current one ends.
@@ -66,6 +74,9 @@ class EpisodePlayerController extends ChangeNotifier {
   String quality = '720p';
   String? errorMessage;
   bool hasPlaybackError = false;
+
+  /// System picture-in-picture is showing this activity / player.
+  bool inPictureInPicture = false;
   bool showLoadingPrompt = false;
   int parkedVersion = 0;
   int switchSeq = 0;
@@ -81,6 +92,7 @@ class EpisodePlayerController extends ChangeNotifier {
   bool _visible = true;
   bool _sawPlayingForAttach = false;
   bool _autoAdvanceScheduled = false;
+  bool _suspendAutoAdvance = false;
 
   /// Bound by [EpisodePlayerView] so end-of-clip can animate the [PageView].
   Future<void> Function(int index)? animateToIndex;
@@ -330,7 +342,11 @@ class EpisodePlayerController extends ChangeNotifier {
 
     final ctrl = PlayerFactory.create(
       url,
-      allowBackgroundPlayback: allowBackgroundPlayback,
+      allowBackgroundPlayback:
+          allowBackgroundPlayback || enablePictureInPicture,
+      viewType: PlayerFactory.viewTypeFor(
+        pictureInPicture: enablePictureInPicture,
+      ),
       preserveHlsVariant: HlsQualityUrl.isVariant(url),
       headersProvider: headersProvider,
       urlTransformer: urlTransformer,
@@ -653,7 +669,11 @@ class EpisodePlayerController extends ChangeNotifier {
 
         final ctrl = PlayerFactory.create(
           url,
-          allowBackgroundPlayback: allowBackgroundPlayback,
+          allowBackgroundPlayback:
+              allowBackgroundPlayback || enablePictureInPicture,
+          viewType: PlayerFactory.viewTypeFor(
+            pictureInPicture: enablePictureInPicture,
+          ),
           preserveHlsVariant: HlsQualityUrl.isVariant(url),
           headersProvider: headersProvider,
           urlTransformer: urlTransformer,
@@ -704,7 +724,20 @@ class EpisodePlayerController extends ChangeNotifier {
     _playerListener = null;
   }
 
+  /// Block end-of-episode advance while the app is leaving the foreground.
+  void setSuspendAutoAdvance(bool value) {
+    _suspendAutoAdvance = value;
+    if (value) _autoAdvanceScheduled = false;
+  }
+
+  void setInPictureInPicture(bool value) {
+    if (inPictureInPicture == value) return;
+    inPictureInPicture = value;
+    notifyListeners();
+  }
+
   void _maybeAutoAdvance(VideoPlayerController ctrl) {
+    if (_suspendAutoAdvance) return;
     if (!autoAdvanceOnEnd || _disposed || _autoAdvanceScheduled) return;
     if (!_sawPlayingForAttach) return;
     if (!FeedPlaybackStrategy.isPlaybackEnded(ctrl.value)) return;
@@ -713,7 +746,12 @@ class EpisodePlayerController extends ChangeNotifier {
   }
 
   Future<void> _runAutoAdvance(int next) async {
+    if (_suspendAutoAdvance || _disposed) {
+      _autoAdvanceScheduled = false;
+      return;
+    }
     try {
+      if (_suspendAutoAdvance) return;
       if (next >= episodes.length) {
         if (hasMore) await loadMore();
         if (_disposed || next >= episodes.length) return;
@@ -722,7 +760,10 @@ class EpisodePlayerController extends ChangeNotifier {
       if (animator != null) {
         await animator(next);
       }
-      if (_disposed) return;
+      if (_suspendAutoAdvance || _disposed) {
+        _autoAdvanceScheduled = false;
+        return;
+      }
       // Animate may no-op if PageController has no clients yet — still switch.
       if (currentIndex != next) {
         await onEpisodePageChanged(next);

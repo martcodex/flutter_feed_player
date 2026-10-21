@@ -5,6 +5,7 @@ import 'package:video_player/video_player.dart';
 
 import '../models/playable_models.dart';
 import '../widgets/lock_forward_page_physics.dart';
+import '../widgets/playback_background_guard.dart';
 import '../widgets/player_surface.dart';
 import '../widgets/vertical_page_refresh.dart';
 import 'feed_player_controller.dart';
@@ -94,6 +95,7 @@ class FeedPlayerView extends StatefulWidget {
 
 class FeedPlayerViewState extends State<FeedPlayerView> {
   late final PageController pageController;
+  late final PlaybackBackgroundGuard _background;
   bool _started = false;
   bool _didJumpInitial = false;
 
@@ -104,6 +106,28 @@ class FeedPlayerViewState extends State<FeedPlayerView> {
     super.initState();
     final start = widget.initialIndex < 0 ? 0 : widget.initialIndex;
     pageController = PageController(initialPage: start);
+    _background = PlaybackBackgroundGuard(
+      pipEnabled: () => controller.enablePictureInPicture,
+      isPlaying: () => controller.isPlaying,
+      userPaused: () => controller.showCenterPlay,
+      currentIndex: () => controller.currentIndex,
+      pageController: () => pageController,
+      videoSize: () {
+        final size = controller.player?.value.size;
+        if (size == null || size.width <= 0 || size.height <= 0) {
+          return const Size(9, 16);
+        }
+        return size;
+      },
+      setSuspendAutoAdvance: controller.setSuspendAutoAdvance,
+      setInPictureInPicture: controller.setInPictureInPicture,
+      pauseForBackground: controller.pause,
+      resumeFromBackground: controller.play,
+      onUpdate: () {
+        if (mounted) setState(() {});
+      },
+    );
+    _background.attach();
     controller.animateToIndex = (index) => animateToPage(index);
     controller.addListener(_onCtrl);
     if (widget.autoInit) {
@@ -134,6 +158,7 @@ class FeedPlayerViewState extends State<FeedPlayerView> {
   }
 
   void _onCtrl() {
+    _background.onForegroundTick();
     if (mounted) setState(() {});
     if (!_didJumpInitial && controller.items.isNotEmpty) {
       unawaited(_jumpToInitialIfNeeded());
@@ -142,6 +167,7 @@ class FeedPlayerViewState extends State<FeedPlayerView> {
 
   @override
   void dispose() {
+    _background.detach();
     controller.animateToIndex = null;
     controller.removeListener(_onCtrl);
     pageController.dispose();
@@ -158,11 +184,16 @@ class FeedPlayerViewState extends State<FeedPlayerView> {
       await WidgetsBinding.instance.endOfFrame;
       if (!mounted || !pageController.hasClients) return;
     }
-    await pageController.animateToPage(
-      index,
-      duration: duration,
-      curve: curve,
-    );
+    _background.programmatic = true;
+    try {
+      await pageController.animateToPage(
+        index,
+        duration: duration,
+        curve: curve,
+      );
+    } finally {
+      _background.programmatic = false;
+    }
   }
 
   @override
@@ -182,6 +213,7 @@ class FeedPlayerViewState extends State<FeedPlayerView> {
     }
 
     final refreshing = c.loading && c.items.isNotEmpty;
+    final pip = c.inPictureInPicture;
 
     return ColoredBox(
       color: Colors.black,
@@ -205,6 +237,7 @@ class FeedPlayerViewState extends State<FeedPlayerView> {
           onLoadMore: c.loadMore,
           child: NotificationListener<ScrollNotification>(
             onNotification: (n) {
+              if (_background.blockPaging) return false;
               if (n is ScrollUpdateNotification &&
                   n.metrics.axis == Axis.vertical &&
                   n.scrollDelta != null &&
@@ -217,9 +250,17 @@ class FeedPlayerViewState extends State<FeedPlayerView> {
               controller: pageController,
               scrollDirection: Axis.vertical,
               allowImplicitScrolling: true,
-              physics: _feedScrollPhysics(c.locksForwardSwipe),
+              physics: _background.blockPaging
+                  ? const NeverScrollableScrollPhysics()
+                  : _feedScrollPhysics(c.locksForwardSwipe),
               itemCount: c.items.length,
-              onPageChanged: c.onPageChanged,
+              onPageChanged: (index) {
+                if (_background.shouldIgnorePageChange()) {
+                  _background.pinPage();
+                  return;
+                }
+                c.onPageChanged(index);
+              },
               itemBuilder: (context, index) {
                 final item = c.items[index];
                 final key = c.itemKey(item, index);
@@ -241,7 +282,8 @@ class FeedPlayerViewState extends State<FeedPlayerView> {
                       key: ValueKey('feed_surface_$key-${c.parkedVersion}'),
                       controller: display,
                     ),
-                    if (isActive &&
+                    if (!pip &&
+                        isActive &&
                         widget.showBufferingIndicator &&
                         !c.videoFrameReady &&
                         !c.hasPlaybackError)
@@ -263,14 +305,14 @@ class FeedPlayerViewState extends State<FeedPlayerView> {
                           ],
                         ),
                       ),
-                    if (isActive && c.hasPlaybackError)
+                    if (!pip && isActive && c.hasPlaybackError)
                       _PlaybackRetryOverlay(
                         message: c.errorMessage ?? 'Playback failed',
                         onRetry: c.retryPlayback,
                       ),
-                    if (isActive && widget.enableGestures)
+                    if (!pip && isActive && widget.enableGestures)
                       const Positioned.fill(child: _FeedGestureLayer()),
-                    if (widget.overlayBuilder != null)
+                    if (!pip && widget.overlayBuilder != null)
                       widget.overlayBuilder!(context, slot),
                   ],
                 );
@@ -304,8 +346,7 @@ class FeedPlayerScope extends InheritedWidget {
   FeedPlayerController get controller => viewState.controller;
 
   static FeedPlayerScope of(BuildContext context) {
-    final scope =
-        context.dependOnInheritedWidgetOfExactType<FeedPlayerScope>();
+    final scope = context.dependOnInheritedWidgetOfExactType<FeedPlayerScope>();
     assert(scope != null, 'FeedPlayerScope not found in context');
     return scope!;
   }

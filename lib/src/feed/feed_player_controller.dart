@@ -19,8 +19,13 @@ class FeedPlayerController extends ChangeNotifier {
     this.headersProvider,
     this.urlTransformer,
     this.allowBackgroundPlayback = false,
+
+    /// System picture-in-picture when a **playing** video backgrounds.
+    /// Paused videos do not open a window. See README for host setup.
+    this.enablePictureInPicture = false,
     this.pageSize = 10,
     this.loopClips = true,
+
     /// When true, blocks swipe-to-next until the first frame is ready.
     /// Default false — HLS cold starts often keep this locked and feel stuck.
     this.lockForwardWhileCold = false,
@@ -31,6 +36,10 @@ class FeedPlayerController extends ChangeNotifier {
   final HttpHeadersProvider? headersProvider;
   final UrlTransformer? urlTransformer;
   final bool allowBackgroundPlayback;
+
+  /// When true, backing out of the app while this feed is playing may show
+  /// a system picture-in-picture window. A user pause does not.
+  final bool enablePictureInPicture;
   final int pageSize;
 
   /// Short-form feeds usually loop the active clip.
@@ -70,6 +79,9 @@ class FeedPlayerController extends ChangeNotifier {
   /// Native / init failure — show retry overlay on the active page.
   bool hasPlaybackError = false;
 
+  /// System picture-in-picture is showing this activity / player.
+  bool inPictureInPicture = false;
+
   /// Prolonged wait after attach — soft loading hint (not a hard error).
   bool showLoadingPrompt = false;
 
@@ -85,6 +97,7 @@ class FeedPlayerController extends ChangeNotifier {
   Timer? _watchdogTimer;
   bool _sawPlayingForAttach = false;
   bool _autoAdvanceScheduled = false;
+  bool _suspendAutoAdvance = false;
 
   /// Bound by [FeedPlayerView] so end-of-clip can animate the [PageView].
   Future<void> Function(int index)? animateToIndex;
@@ -216,7 +229,8 @@ class FeedPlayerController extends ChangeNotifier {
 
     final promoted = _parked.remove(key);
     if (promoted != null && FeedPlaybackStrategy.isReusablePlayer(promoted)) {
-      await _attachActive(promoted, key: key, seq: seq, restartFromStart: restartFromStart);
+      await _attachActive(promoted,
+          key: key, seq: seq, restartFromStart: restartFromStart);
       _schedulePreload(index);
       return;
     }
@@ -227,7 +241,8 @@ class FeedPlayerController extends ChangeNotifier {
       if (seq != _playSeq || _disposed) return;
       final late = _parked.remove(key);
       if (late != null && FeedPlaybackStrategy.isReusablePlayer(late)) {
-        await _attachActive(late, key: key, seq: seq, restartFromStart: restartFromStart);
+        await _attachActive(late,
+            key: key, seq: seq, restartFromStart: restartFromStart);
         _schedulePreload(index);
         return;
       }
@@ -313,7 +328,11 @@ class FeedPlayerController extends ChangeNotifier {
   Future<VideoPlayerController?> _createAndInit(String url, String key) async {
     final ctrl = PlayerFactory.create(
       url,
-      allowBackgroundPlayback: allowBackgroundPlayback,
+      allowBackgroundPlayback:
+          allowBackgroundPlayback || enablePictureInPicture,
+      viewType: PlayerFactory.viewTypeFor(
+        pictureInPicture: enablePictureInPicture,
+      ),
       headersProvider: headersProvider,
       urlTransformer: urlTransformer,
     );
@@ -656,7 +675,20 @@ class FeedPlayerController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Block end-of-clip advance while the app is leaving the foreground.
+  void setSuspendAutoAdvance(bool value) {
+    _suspendAutoAdvance = value;
+    if (value) _autoAdvanceScheduled = false;
+  }
+
+  void setInPictureInPicture(bool value) {
+    if (inPictureInPicture == value) return;
+    inPictureInPicture = value;
+    notifyListeners();
+  }
+
   void _maybeAutoAdvance(VideoPlayerController ctrl) {
+    if (_suspendAutoAdvance) return;
     if (!autoAdvanceOnEnd || _disposed || _autoAdvanceScheduled) return;
     if (!_sawPlayingForAttach) return;
     if (!FeedPlaybackStrategy.isPlaybackEnded(ctrl.value)) return;
@@ -665,7 +697,12 @@ class FeedPlayerController extends ChangeNotifier {
   }
 
   Future<void> _runAutoAdvance(int next) async {
+    if (_suspendAutoAdvance || _disposed) {
+      _autoAdvanceScheduled = false;
+      return;
+    }
     try {
+      if (_suspendAutoAdvance) return;
       if (next >= items.length) {
         if (hasMore) await loadMore();
         if (_disposed || next >= items.length) return;
@@ -674,7 +711,10 @@ class FeedPlayerController extends ChangeNotifier {
       if (animator != null) {
         await animator(next);
       }
-      if (_disposed) return;
+      if (_suspendAutoAdvance || _disposed) {
+        _autoAdvanceScheduled = false;
+        return;
+      }
       if (currentIndex != next) {
         await onPageChanged(next);
       }
@@ -697,7 +737,8 @@ class FeedPlayerController extends ChangeNotifier {
     final liked = !item.isLiked;
     items[index] = item.copyWith(
       isLiked: liked,
-      likeCount: liked ? item.likeCount + 1 : (item.likeCount - 1).clamp(0, 1 << 30),
+      likeCount:
+          liked ? item.likeCount + 1 : (item.likeCount - 1).clamp(0, 1 << 30),
     );
     notifyListeners();
   }

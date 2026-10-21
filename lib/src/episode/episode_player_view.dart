@@ -3,6 +3,7 @@ import 'package:video_player/video_player.dart';
 
 import '../models/playable_models.dart';
 import '../widgets/lock_forward_page_physics.dart';
+import '../widgets/playback_background_guard.dart';
 import '../widgets/player_surface.dart';
 import '../widgets/vertical_page_refresh.dart';
 import 'episode_player_controller.dart';
@@ -78,6 +79,7 @@ class EpisodePlayerView extends StatefulWidget {
 
 class EpisodePlayerViewState extends State<EpisodePlayerView> {
   PageController? pageController;
+  late final PlaybackBackgroundGuard _background;
   bool _started = false;
   int _boundRevision = -1;
 
@@ -86,6 +88,28 @@ class EpisodePlayerViewState extends State<EpisodePlayerView> {
   @override
   void initState() {
     super.initState();
+    _background = PlaybackBackgroundGuard(
+      pipEnabled: () => controller.enablePictureInPicture,
+      isPlaying: () => controller.isPlaying,
+      userPaused: () => controller.showCenterPlay,
+      currentIndex: () => controller.currentIndex,
+      pageController: () => pageController,
+      videoSize: () {
+        final size = controller.player?.value.size;
+        if (size == null || size.width <= 0 || size.height <= 0) {
+          return const Size(9, 16);
+        }
+        return size;
+      },
+      setSuspendAutoAdvance: controller.setSuspendAutoAdvance,
+      setInPictureInPicture: controller.setInPictureInPicture,
+      pauseForBackground: controller.pause,
+      resumeFromBackground: controller.play,
+      onUpdate: () {
+        if (mounted) setState(() {});
+      },
+    );
+    _background.attach();
     controller.animateToIndex = (index) => animateToEpisode(index);
     controller.addListener(_onCtrl);
     if (widget.autoInit) {
@@ -103,9 +127,7 @@ class EpisodePlayerViewState extends State<EpisodePlayerView> {
     final c = controller;
     if (c.episodes.isEmpty) return;
     final revision = c.episodeRevision;
-    if (!force &&
-        pageController != null &&
-        _boundRevision == revision) {
+    if (!force && pageController != null && _boundRevision == revision) {
       return;
     }
     pageController?.dispose();
@@ -115,6 +137,7 @@ class EpisodePlayerViewState extends State<EpisodePlayerView> {
   }
 
   void _onCtrl() {
+    _background.onForegroundTick();
     if (!mounted) return;
     final c = controller;
     if (pageController == null && c.episodes.isNotEmpty && !c.loading) {
@@ -134,6 +157,7 @@ class EpisodePlayerViewState extends State<EpisodePlayerView> {
 
   @override
   void dispose() {
+    _background.detach();
     controller.animateToIndex = null;
     controller.removeListener(_onCtrl);
     pageController?.dispose();
@@ -154,7 +178,12 @@ class EpisodePlayerViewState extends State<EpisodePlayerView> {
       pc = pageController;
       if (pc == null || !pc.hasClients) return;
     }
-    await pc.animateToPage(index, duration: duration, curve: curve);
+    _background.programmatic = true;
+    try {
+      await pc.animateToPage(index, duration: duration, curve: curve);
+    } finally {
+      _background.programmatic = false;
+    }
   }
 
   @override
@@ -175,6 +204,7 @@ class EpisodePlayerViewState extends State<EpisodePlayerView> {
 
     final series = c.series!;
     final refreshing = c.loading && c.episodes.isNotEmpty;
+    final pip = c.inPictureInPicture;
 
     return ColoredBox(
       color: Colors.black,
@@ -198,9 +228,17 @@ class EpisodePlayerViewState extends State<EpisodePlayerView> {
             controller: pageController,
             scrollDirection: Axis.vertical,
             allowImplicitScrolling: true,
-            physics: _episodeScrollPhysics(c.locksForwardSwipe),
+            physics: _background.blockPaging
+                ? const NeverScrollableScrollPhysics()
+                : _episodeScrollPhysics(c.locksForwardSwipe),
             itemCount: c.episodes.length,
-            onPageChanged: c.onEpisodePageChanged,
+            onPageChanged: (index) {
+              if (_background.shouldIgnorePageChange()) {
+                _background.pinPage();
+                return;
+              }
+              c.onEpisodePageChanged(index);
+            },
             itemBuilder: (context, index) {
               final ep = c.episodes[index];
               final episodeId =
@@ -226,7 +264,8 @@ class EpisodePlayerViewState extends State<EpisodePlayerView> {
                     ),
                     controller: display,
                   ),
-                  if (isActive &&
+                  if (!pip &&
+                      isActive &&
                       widget.showBufferingIndicator &&
                       !c.videoFrameReady &&
                       !c.hasPlaybackError)
@@ -248,14 +287,14 @@ class EpisodePlayerViewState extends State<EpisodePlayerView> {
                         ],
                       ),
                     ),
-                  if (isActive && c.hasPlaybackError)
+                  if (!pip && isActive && c.hasPlaybackError)
                     _EpisodeRetryOverlay(
                       message: c.errorMessage ?? 'Playback failed',
                       onRetry: c.retryPlayback,
                     ),
-                  if (isActive && widget.enableGestures)
+                  if (!pip && isActive && widget.enableGestures)
                     const Positioned.fill(child: _EpisodeGestureLayer()),
-                  if (widget.overlayBuilder != null)
+                  if (!pip && widget.overlayBuilder != null)
                     widget.overlayBuilder!(context, slot),
                 ],
               );
@@ -286,8 +325,7 @@ class EpisodePlayerScope extends InheritedWidget {
 
   EpisodePlayerController get controller => viewState.controller;
 
-  Future<void> animateToEpisode(int index) =>
-      viewState.animateToEpisode(index);
+  Future<void> animateToEpisode(int index) => viewState.animateToEpisode(index);
 
   static EpisodePlayerScope of(BuildContext context) {
     final scope =

@@ -41,6 +41,7 @@ class _EpisodeDemoPageState extends State<EpisodeDemoPage> {
       initialEpisodeNo: 1,
       lockForwardWhileCold: widget.params.lockForwardWhileCold,
       autoAdvanceOnEnd: widget.params.autoAdvanceOnEnd,
+      enablePictureInPicture: widget.params.enablePictureInPicture,
     );
   }
 

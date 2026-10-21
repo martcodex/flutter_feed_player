@@ -92,6 +92,17 @@ class PlayerFactory {
     return const <String, String>{};
   }
 
+  /// iOS picture-in-picture needs an [AVPlayerLayer], which [video_player]
+  /// only creates for [VideoViewType.platformView]. Android PiP shows the
+  /// Flutter texture, so it stays on [VideoViewType.textureView].
+  static VideoViewType viewTypeFor({required bool pictureInPicture}) {
+    if (!pictureInPicture || kIsWeb) return VideoViewType.textureView;
+    if (defaultTargetPlatform == TargetPlatform.iOS) {
+      return VideoViewType.platformView;
+    }
+    return VideoViewType.textureView;
+  }
+
   /// Creates a controller for network / asset / file URLs.
   static VideoPlayerController create(
     String url, {

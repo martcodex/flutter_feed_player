@@ -1,3 +1,21 @@
+## Unreleased
+
+* Add `enablePictureInPicture` on `FeedPlayerController` and
+  `EpisodePlayerController` (default `false`). A playing clip opens the
+  system picture-in-picture window when the app backgrounds; a paused clip
+  does not. The active page stays pinned across that resize, and
+  auto-advance is suspended until the app resumes.
+* Ship an Android / iOS plugin (`FlutterFeedPlayerPlugin`). Android needs
+  `android:supportsPictureInPicture` plus Activity forwarding from
+  `onUserLeaveHint` and `onPictureInPictureModeChanged` (auto-enter on
+  Android 12+; explicit enter below that). iOS needs `UIBackgroundModes`
+  `audio` and uses a platform-view player so picture-in-picture can bind
+  the on-screen `AVPlayerLayer`.
+* While `inPictureInPicture` is true, the default view hides gestures, the
+  buffering spinner, and chrome. Notification shade and Control Center do
+  not open the window. Web and desktop ignore the calls.
+* Example: picture-in-picture toggle, plus the Android and iOS host setup.
+
 ## 0.1.6
 
 * Episode quality: the top bar shows the current rendition and opens

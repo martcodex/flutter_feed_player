@@ -29,6 +29,15 @@ class PlayerSurface extends StatelessWidget {
     final w = size.width > 0 ? size.width : minLogicalSize.width;
     final h = size.height > 0 ? size.height : minLogicalSize.height;
 
+    // Platform views ignore [FittedBox] transforms, and iOS PiP needs that
+    // AVPlayerLayer to have a real on-screen frame.
+    if (ctrl.viewType == VideoViewType.platformView) {
+      return ColoredBox(
+        color: Colors.black,
+        child: SizedBox.expand(child: VideoPlayer(ctrl)),
+      );
+    }
+
     return ColoredBox(
       color: Colors.black,
       child: FittedBox(

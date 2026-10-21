@@ -12,6 +12,7 @@ class PlayerDemoParams {
     this.lockForwardWhileCold = false,
     this.loopClips = false,
     this.autoAdvanceOnEnd = true,
+    this.enablePictureInPicture = true,
   });
 
   final bool enableGestures;
@@ -24,6 +25,9 @@ class PlayerDemoParams {
   /// After a clip / episode ends, slide to and play the next one.
   final bool autoAdvanceOnEnd;
 
+  /// System picture-in-picture when a playing video enters the background.
+  final bool enablePictureInPicture;
+
   PlayerDemoParams copyWith({
     bool? enableGestures,
     bool? showBufferingIndicator,
@@ -32,6 +36,7 @@ class PlayerDemoParams {
     bool? lockForwardWhileCold,
     bool? loopClips,
     bool? autoAdvanceOnEnd,
+    bool? enablePictureInPicture,
   }) {
     return PlayerDemoParams(
       enableGestures: enableGestures ?? this.enableGestures,
@@ -42,6 +47,8 @@ class PlayerDemoParams {
       lockForwardWhileCold: lockForwardWhileCold ?? this.lockForwardWhileCold,
       loopClips: loopClips ?? this.loopClips,
       autoAdvanceOnEnd: autoAdvanceOnEnd ?? this.autoAdvanceOnEnd,
+      enablePictureInPicture:
+          enablePictureInPicture ?? this.enablePictureInPicture,
     );
   }
 }
@@ -87,8 +94,7 @@ class PlayerParamPanel extends StatelessWidget {
               title: l10n.paramGestures,
               subtitle: l10n.paramGesturesHint,
               value: params.enableGestures,
-              onChanged: (v) =>
-                  onChanged(params.copyWith(enableGestures: v)),
+              onChanged: (v) => onChanged(params.copyWith(enableGestures: v)),
             ),
             _ParamSwitchTile(
               title: l10n.paramBuffering,
@@ -123,6 +129,13 @@ class PlayerParamPanel extends StatelessWidget {
         _ParamGroupCard(
           title: l10n.paramGroupPlayback,
           children: [
+            _ParamSwitchTile(
+              title: l10n.paramPip,
+              subtitle: l10n.paramPipHint,
+              value: params.enablePictureInPicture,
+              onChanged: (v) =>
+                  onChanged(params.copyWith(enablePictureInPicture: v)),
+            ),
             _ParamSwitchTile(
               title: l10n.paramLockForward,
               subtitle: l10n.paramLockForwardHint,
