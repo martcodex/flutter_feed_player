@@ -1,4 +1,4 @@
-## Unreleased
+## 0.1.9
 
 * Add `enableLandscapeFullscreen` on `FeedPlayer` / `EpisodePlayer` and the
   matching views (default `false`). 16:9 and wider-than-tall clips are
