@@ -228,7 +228,7 @@ class EpisodePlayerController extends ChangeNotifier {
     _cancelColdStartTimers();
     _detachListener();
     final ids = <String>{
-      if (activeEpisodeId != null) activeEpisodeId!,
+      ?activeEpisodeId,
       for (var i = 0; i < episodes.length; i++)
         episodes[i].episodeId.isNotEmpty ? episodes[i].episodeId : 'ep_$i',
     };
