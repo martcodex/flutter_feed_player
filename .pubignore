@@ -2,6 +2,9 @@
 # Keep this in sync with .gitignore, plus extra publish-only excludes.
 
 # Tooling / build
+.build/
+.swiftpm/
+ios/FlutterFramework/
 .dart_tool/
 .packages
 build/

@@ -3,7 +3,6 @@ version = "1.0-SNAPSHOT"
 
 plugins {
     id("com.android.library")
-    id("org.jetbrains.kotlin.android")
 }
 
 android {

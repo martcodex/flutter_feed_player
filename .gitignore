@@ -17,3 +17,8 @@ coverage/
 # Example lock is useful for demos; package root lock is not published
 example/.dart_tool/
 example/build/
+
+# Swift Package Manager
+.build/
+.swiftpm/
+ios/FlutterFramework/

@@ -1,4 +1,15 @@
-## Unreleased
+## 0.1.8
+
+* Add Swift Package Manager support for the iOS plugin
+  (`ios/flutter_feed_player/Package.swift` + Sources). CocoaPods still
+  builds the same Swift sources and ships `PrivacyInfo.xcprivacy`.
+* Move the iOS plugin out of `ios/Classes/` into the SPM layout; bump the
+  podspec to `0.1.8`.
+* Migrate the Android plugin to Flutter's built-in Kotlin (drop
+  `org.jetbrains.kotlin.android`). Minimum SDK is Flutter `>=3.44.0` /
+  Dart `^3.12.0` (example aligned).
+
+## 0.1.7
 
 * Add `enablePictureInPicture` on `FeedPlayerController` and
   `EpisodePlayerController` (default `false`). A playing clip opens the

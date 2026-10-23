@@ -76,14 +76,14 @@ FeedPlayerController / EpisodePlayerController   (loader 分页)
 
 ```yaml
 dependencies:
-  flutter_feed_player: ^0.1.6
+  flutter_feed_player: ^0.1.8
 ```
 
 ```sh
 flutter pub get
 ```
 
-要求 Flutter `>=3.27.0`，与 [`video_player`](https://pub.dev/packages/video_player) `^2.10.0` 一致。确保目标平台已按该插件文档完成配置（如 Android 网络权限、iOS ATS）。网络渐进式媒体需支持 **HTTP Range**（尤其 AVPlayer）。
+要求 Flutter `>=3.44.0` / Dart `^3.12.0`（Android 插件使用 Flutter 内置 Kotlin），以及 [`video_player`](https://pub.dev/packages/video_player) `^2.10.0`。iOS 插件同时支持 **Swift Package Manager**（`ios/flutter_feed_player/`）与 **CocoaPods**（同一套 Swift 源）。确保目标平台已按该插件文档完成配置（如 Android 网络权限、iOS ATS）。网络渐进式媒体需支持 **HTTP Range**（尤其 AVPlayer）。
 
 ### 2. 映射播放数据
 
@@ -427,7 +427,7 @@ FeedPlayerController(
 
 开启画中画后，当前播放器按可后台播放创建。iOS 会改用 `VideoViewType.platformView`（系统画中画要绑到屏幕上的 `AVPlayerLayer`），画面铺满页面。Web / 桌面没有系统小窗，相关调用会被忽略。
 
-包内带 Android / iOS 插件 `FlutterFeedPlayerPlugin`，`flutter pub get` 后会注册。宿主还要完成下面的平台配置。Example 已接好。
+包内带 Android / iOS 插件 `FlutterFeedPlayerPlugin`，`flutter pub get` 后会注册（iOS 可用 SPM 或 CocoaPods）。宿主还要完成下面的平台配置。Example 已接好。
 
 **Android（8.0+；自动进入需要 12+）**
 
