@@ -24,5 +24,6 @@ export 'src/episode/episode_player_chrome.dart';
 export 'src/episode/episode_player.dart';
 export 'src/widgets/player_seek_bar.dart';
 export 'src/widgets/player_surface.dart';
+export 'src/widgets/landscape_fullscreen.dart';
 export 'src/widgets/lock_forward_page_physics.dart';
 export 'src/widgets/vertical_page_refresh.dart';

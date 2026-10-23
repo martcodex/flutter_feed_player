@@ -253,6 +253,31 @@ class DemoL10n {
         DemoLang.ja => 'バッファ表示',
       };
 
+  String get paramLandscapeFullscreen => switch (lang) {
+        DemoLang.zh => '展示全屏',
+        DemoLang.en => 'Show fullscreen',
+        DemoLang.ja => '全画面を表示',
+      };
+
+  String get paramLandscapeFullscreenHint => switch (lang) {
+        DemoLang.zh => '16:9 或横屏视频在画面下方显示全屏，可返回小屏',
+        DemoLang.en =>
+          'Fullscreen control under 16:9 and landscape videos, with a way back',
+        DemoLang.ja => '16:9 または横長動画の下に全画面。小画面に戻れる',
+      };
+
+  String get fullscreen => switch (lang) {
+        DemoLang.zh => '全屏',
+        DemoLang.en => 'Fullscreen',
+        DemoLang.ja => '全画面',
+      };
+
+  String get exitFullscreen => switch (lang) {
+        DemoLang.zh => '小屏',
+        DemoLang.en => 'Small',
+        DemoLang.ja => '小画面',
+      };
+
   String get paramBufferingHint => switch (lang) {
         DemoLang.zh => '加载时显示转圈',
         DemoLang.en => 'Show spinner while loading',

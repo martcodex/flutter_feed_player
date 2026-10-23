@@ -37,6 +37,7 @@ Swipe feed, pull-to-refresh, and load-more in the example app:
 - Network, Flutter asset (`asset://…`), and local `file:` URLs via `PlayerFactory.create`
 - Optional `HttpHeadersProvider` / `UrlTransformer` for CDN auth
 - Picture-in-picture (`enablePictureInPicture`): a playing clip opens the system window on background; a paused clip does not. The active page stays pinned across that resize
+- Landscape fullscreen (`enableLandscapeFullscreen`): 16:9 / wider-than-tall clips are letterboxed in the portrait feed, with a fullscreen chip under the video
 
 Player core and UI components are separated: keep the view, swap chrome via `overlayBuilder`.
 
@@ -211,6 +212,10 @@ class _FeedPageState extends State<FeedPage> {
       body: FeedPlayer(
         controller: _controller,
         bottomInset: MediaQuery.paddingOf(context).bottom,
+        // 16:9 / 横屏片：竖屏流内 letterbox，下方显示全屏按钮
+        enableLandscapeFullscreen: true,
+        landscapeFullscreenLabel: '全屏',
+        exitLandscapeFullscreenLabel: '退出',
         onWatchFullSeries: (index) {
           final item = _controller.items[index];
           // 跳转 EpisodePlayer，传入 seriesId / 起始集
@@ -300,6 +305,7 @@ class _SeriesPageState extends State<SeriesPage> {
       backgroundColor: Colors.black,
       body: EpisodePlayer(
         controller: _controller,
+        enableLandscapeFullscreen: true,
         onBack: () => Navigator.of(context).maybePop(),
         onShare: () { /* 分享 */ },
         onOpenEpisodeList: () { /* 选集面板 */ },
@@ -418,6 +424,18 @@ FeedPlayerController(
 - 从 Feed 进剧集：在 `onWatchFullSeries` 里 `Navigator.push` 打开带同一 `seriesId` 的 `EpisodePlayer`。
 - WebM / DASH 在 iOS/macOS 不可播；可用 `MediaFormat` 过滤列表或展示 `unsupportedReason`。
 - View 会绑定 `controller.animateToIndex`，供 `autoAdvanceOnEnd` 驱动 `PageView` 动画；自建列表时需自行赋值。
+- 横屏全屏见下一小节。默认 `enableLandscapeFullscreen: false`。
+
+#### 横屏全屏（Landscape fullscreen）
+
+`FeedPlayer` / `EpisodePlayer`（及对应 `*View`）设 `enableLandscapeFullscreen: true`。当当前片宽高比约为 **16:9**，或宽大于高时：
+
+1. 竖屏流内用 **letterbox** 居中显示（`PlayerSurface.letterbox`），不再 cover 裁切。
+2. 画面下方出现全屏按钮（文案用 `landscapeFullscreenLabel`）。
+3. 进入全屏后叠一层 `LandscapeFullscreenStage`：宿主仍可保持竖屏锁定，舞台用 `RotatedBox` 旋转，手机横过来时画面为正；自带进度条与退出按钮（`exitLandscapeFullscreenLabel`）。点空白可播放 / 暂停。
+4. 系统返回键或手势先退出全屏；片尾也会自动退出，回到小窗播放器。
+
+画中画打开时不显示全屏入口。自绘时可复用导出的 `LandscapeVideoLayout` / `LandscapeFullscreenButton` / `LandscapeFullscreenStage`。
 
 #### 画中画（Picture-in-picture）
 
@@ -490,6 +508,7 @@ class MainActivity : FlutterActivity() {
 - [ ] 按需配置 `loopClips` / `autoAdvanceOnEnd`（二者有效互斥）
 - [ ] 多清晰度时填写 `EpisodeAsset.quality`，或提供可改写的 HLS master / variant 地址
 - [ ] 需要画中画时设 `enablePictureInPicture`，并完成 Android Activity / iOS `UIBackgroundModes` 配置
+- [ ] 需要横屏片全屏时设 `enableLandscapeFullscreen`，并配置按钮文案
 - [ ] 真机验证竖滑、下拉刷新、上拉加载、播完自动下一则、音画互斥
 
 ---
@@ -509,6 +528,7 @@ final controller = FeedPlayerController(
 
 FeedPlayer(
   controller: controller,
+  // enableLandscapeFullscreen: true, // letterbox 16:9 + fullscreen chip
   onWatchFullSeries: (index) { /* open EpisodePlayer */ },
   onShare: (index) { /* … */ },
   onMore: (index) { /* … */ },
@@ -526,7 +546,10 @@ final controller = EpisodePlayerController(
   // enablePictureInPicture: true, // host setup required — see README
 );
 
-EpisodePlayer(controller: controller);
+EpisodePlayer(
+  controller: controller,
+  // enableLandscapeFullscreen: true,
+);
 ```
 
 Default episode quality is `720p`. The top bar shows it when more than one rendition exists. Pass labeled `EpisodeAsset`s, or a convertible HLS URL (`/master.m3u8` / `/v{height}/index.m3u8`). See the integration section above for the option table and `setQuality`.
@@ -538,7 +561,7 @@ cd example
 flutter run
 ```
 
-Example home lists format filters available on the **current platform** (MP4 / HLS / MOV / M4V; plus WebM / DASH where supported). Samples include public network streams and a bundled WebM under `asset://assets/videos/…`. Demo pages expose grouped playback toggles (gestures, pull refresh/load-more, lock-forward, loop, auto-advance, picture-in-picture) and compose chrome via `overlayBuilder`. The example Android activity and iOS `Info.plist` already include the picture-in-picture host setup.
+Example home lists format filters available on the **current platform** (MP4 / HLS / MOV / M4V; plus WebM / DASH where supported). Samples include public network streams and a bundled WebM under `asset://assets/videos/…`. Demo pages expose grouped playback toggles (gestures, pull refresh/load-more, lock-forward, loop, auto-advance, picture-in-picture, landscape fullscreen) and compose chrome via `overlayBuilder`. The example Android activity and iOS `Info.plist` already include the picture-in-picture host setup.
 
 ## Models
 
@@ -554,7 +577,9 @@ Provide `playUrl` and/or `assets[].url`. Set `EpisodeAsset.quality` (`1080p`, `7
 
 **Episode:** `EpisodePlayerChrome`, `EpisodeTopBar` (back / title / quality / speed), `EpisodeCenterControl`, `EpisodeSideActions`, `EpisodeBottomChrome`, `EpisodeBoostBadge`, `showEpisodeQualitySheet`, `showEpisodeSpeedSheet`
 
-`PlayerSeekBar` shows a center-out loading beam while uninitialized (one pixel thinner than the playback track), then a progress thumb, scrub time labels (`current / total`), and `onScrubbingChanged`. `EpisodeCenterControl` takes `color` and draws a plain play/pause icon. Gate center glyphs with `videoFrameReady`; for episodes also use `showCenterPause` (tap-to-reveal while playing) and `showCenterPlay` (paused). Quality labels come from `EpisodePlayerController.qualityOptionsFor`; apply a choice with `setQuality`.
+**Landscape:** `LandscapeVideoLayout`, `LandscapeSurfaceLayers`, `LandscapeFullscreenButton`, `LandscapeFullscreenStage`
+
+`PlayerSeekBar` shows a center-out loading beam while uninitialized (one pixel thinner than the playback track), then a progress thumb, scrub time labels (`current / total`), and `onScrubbingChanged`. `EpisodeCenterControl` takes `color` and draws a plain play/pause icon. Gate center glyphs with `videoFrameReady`; for episodes also use `showCenterPause` (tap-to-reveal while playing) and `showCenterPlay` (paused). Quality labels come from `EpisodePlayerController.qualityOptionsFor`; apply a choice with `setQuality`. `PlayerSurface.letterbox` fits the real aspect instead of cover-cropping.
 
 ## License
 

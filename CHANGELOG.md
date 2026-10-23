@@ -1,3 +1,15 @@
+## Unreleased
+
+* Add `enableLandscapeFullscreen` on `FeedPlayer` / `EpisodePlayer` and the
+  matching views (default `false`). 16:9 and wider-than-tall clips are
+  letterboxed in the portrait feed, with a fullscreen chip under the video.
+* Fullscreen uses `LandscapeFullscreenStage`: the host can stay
+  portrait-locked while the stage rotates; seek bar + exit control;
+  back gesture exits fullscreen first; end-of-clip also exits.
+* Export `LandscapeVideoLayout`, `LandscapeFullscreenButton`, and
+  `LandscapeFullscreenStage`. `PlayerSurface` gains `letterbox`.
+* Example: landscape fullscreen toggle and localized button labels.
+
 ## 0.1.8
 
 * Add Swift Package Manager support for the iOS plugin

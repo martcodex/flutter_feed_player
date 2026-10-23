@@ -13,6 +13,7 @@ class PlayerDemoParams {
     this.loopClips = false,
     this.autoAdvanceOnEnd = true,
     this.enablePictureInPicture = true,
+    this.showLandscapeFullscreen = true,
   });
 
   final bool enableGestures;
@@ -28,6 +29,9 @@ class PlayerDemoParams {
   /// System picture-in-picture when a playing video enters the background.
   final bool enablePictureInPicture;
 
+  /// Show a fullscreen control under 16:9 and landscape videos.
+  final bool showLandscapeFullscreen;
+
   PlayerDemoParams copyWith({
     bool? enableGestures,
     bool? showBufferingIndicator,
@@ -37,6 +41,7 @@ class PlayerDemoParams {
     bool? loopClips,
     bool? autoAdvanceOnEnd,
     bool? enablePictureInPicture,
+    bool? showLandscapeFullscreen,
   }) {
     return PlayerDemoParams(
       enableGestures: enableGestures ?? this.enableGestures,
@@ -49,6 +54,8 @@ class PlayerDemoParams {
       autoAdvanceOnEnd: autoAdvanceOnEnd ?? this.autoAdvanceOnEnd,
       enablePictureInPicture:
           enablePictureInPicture ?? this.enablePictureInPicture,
+      showLandscapeFullscreen:
+          showLandscapeFullscreen ?? this.showLandscapeFullscreen,
     );
   }
 }
@@ -102,6 +109,13 @@ class PlayerParamPanel extends StatelessWidget {
               value: params.showBufferingIndicator,
               onChanged: (v) =>
                   onChanged(params.copyWith(showBufferingIndicator: v)),
+            ),
+            _ParamSwitchTile(
+              title: l10n.paramLandscapeFullscreen,
+              subtitle: l10n.paramLandscapeFullscreenHint,
+              value: params.showLandscapeFullscreen,
+              onChanged: (v) =>
+                  onChanged(params.copyWith(showLandscapeFullscreen: v)),
             ),
           ],
         ),

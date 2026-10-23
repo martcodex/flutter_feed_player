@@ -17,7 +17,7 @@ screenshots:
   - description: >-
       Vertical short-video feed with a butterfly clip, center play button,
       like and share actions, and a bottom seek bar.
-    path: screenshots/feed_player.jpg
+    path: screenshots/feed_player.png
 
 environment:
   sdk: ^3.12.0

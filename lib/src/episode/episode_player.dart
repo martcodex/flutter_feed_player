@@ -23,6 +23,9 @@ class EpisodePlayer extends StatelessWidget {
     this.autoInit = true,
     this.enablePullToRefresh = true,
     this.enablePullToLoadMore = true,
+    this.enableLandscapeFullscreen = false,
+    this.landscapeFullscreenLabel = 'Fullscreen',
+    this.exitLandscapeFullscreenLabel = 'Exit',
   });
 
   final EpisodePlayerController controller;
@@ -41,6 +44,11 @@ class EpisodePlayer extends StatelessWidget {
   final bool enablePullToRefresh;
   final bool enablePullToLoadMore;
 
+  /// Letterbox 16:9 and landscape clips and show a fullscreen control under them.
+  final bool enableLandscapeFullscreen;
+  final String landscapeFullscreenLabel;
+  final String exitLandscapeFullscreenLabel;
+
   @override
   Widget build(BuildContext context) {
     return EpisodePlayerView(
@@ -52,6 +60,9 @@ class EpisodePlayer extends StatelessWidget {
       autoInit: autoInit,
       enablePullToRefresh: enablePullToRefresh,
       enablePullToLoadMore: enablePullToLoadMore,
+      enableLandscapeFullscreen: enableLandscapeFullscreen,
+      landscapeFullscreenLabel: landscapeFullscreenLabel,
+      exitLandscapeFullscreenLabel: exitLandscapeFullscreenLabel,
       overlayBuilder: overlayBuilder ??
           (context, slot) => EpisodePlayerChrome(
                 slot: slot,

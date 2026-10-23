@@ -54,6 +54,7 @@ class _EpisodeDemoPageState extends State<EpisodeDemoPage> {
   @override
   Widget build(BuildContext context) {
     final p = widget.params;
+    final l10n = DemoLocaleScope.l10nOf(context);
     return Scaffold(
       backgroundColor: Colors.black,
       body: EpisodePlayerView(
@@ -62,6 +63,9 @@ class _EpisodeDemoPageState extends State<EpisodeDemoPage> {
         showBufferingIndicator: p.showBufferingIndicator,
         enablePullToRefresh: p.enablePullToRefresh,
         enablePullToLoadMore: p.enablePullToLoadMore,
+        enableLandscapeFullscreen: p.showLandscapeFullscreen,
+        landscapeFullscreenLabel: l10n.fullscreen,
+        exitLandscapeFullscreenLabel: l10n.exitFullscreen,
         overlayBuilder: (context, slot) => _DemoEpisodeChrome(
           slot: slot,
           onBack: () => Navigator.of(context).maybePop(),

@@ -4,9 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 
 import '../models/playable_models.dart';
+import '../widgets/landscape_fullscreen.dart';
 import '../widgets/lock_forward_page_physics.dart';
 import '../widgets/playback_background_guard.dart';
-import '../widgets/player_surface.dart';
 import '../widgets/vertical_page_refresh.dart';
 import 'feed_player_controller.dart';
 
@@ -58,6 +58,9 @@ class FeedPlayerView extends StatefulWidget {
     this.initialIndex = 0,
     this.enablePullToRefresh = true,
     this.enablePullToLoadMore = true,
+    this.enableLandscapeFullscreen = false,
+    this.landscapeFullscreenLabel = 'Fullscreen',
+    this.exitLandscapeFullscreenLabel = 'Exit',
   });
 
   final FeedPlayerController controller;
@@ -89,6 +92,15 @@ class FeedPlayerView extends StatefulWidget {
   /// Pull up on the last page to call [FeedPlayerController.loadMore].
   final bool enablePullToLoadMore;
 
+  /// Letterbox 16:9 and landscape clips and show a fullscreen control under them.
+  final bool enableLandscapeFullscreen;
+
+  /// Label on the control under a landscape clip.
+  final String landscapeFullscreenLabel;
+
+  /// Label that returns from fullscreen to the small player.
+  final String exitLandscapeFullscreenLabel;
+
   @override
   State<FeedPlayerView> createState() => FeedPlayerViewState();
 }
@@ -98,6 +110,7 @@ class FeedPlayerViewState extends State<FeedPlayerView> {
   late final PlaybackBackgroundGuard _background;
   bool _started = false;
   bool _didJumpInitial = false;
+  bool _landscapeFullscreen = false;
 
   FeedPlayerController get controller => widget.controller;
 
@@ -155,6 +168,24 @@ class FeedPlayerViewState extends State<FeedPlayerView> {
       pageController.jumpToPage(index);
     }
     await controller.onPageChanged(index);
+  }
+
+  void _enterLandscapeFullscreen() {
+    if (_landscapeFullscreen || !widget.enableLandscapeFullscreen) return;
+    setState(() => _landscapeFullscreen = true);
+  }
+
+  void _exitLandscapeFullscreen() {
+    if (!_landscapeFullscreen) return;
+    setState(() => _landscapeFullscreen = false);
+  }
+
+  @override
+  void didUpdateWidget(FeedPlayerView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!widget.enableLandscapeFullscreen && _landscapeFullscreen) {
+      _landscapeFullscreen = false;
+    }
   }
 
   void _onCtrl() {
@@ -215,7 +246,7 @@ class FeedPlayerViewState extends State<FeedPlayerView> {
     final refreshing = c.loading && c.items.isNotEmpty;
     final pip = c.inPictureInPicture;
 
-    return ColoredBox(
+    final feed = ColoredBox(
       color: Colors.black,
       child: FeedPlayerScope(
         viewState: this,
@@ -275,51 +306,95 @@ class FeedPlayerViewState extends State<FeedPlayerView> {
                   isActive: isActive,
                 );
 
-                return Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    PlayerSurface(
-                      key: ValueKey('feed_surface_$key-${c.parkedVersion}'),
-                      controller: display,
-                    ),
-                    if (!pip &&
-                        isActive &&
-                        widget.showBufferingIndicator &&
-                        !c.videoFrameReady &&
-                        !c.hasPlaybackError)
-                      Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const CircularProgressIndicator(
-                              color: Colors.white,
+                return LayoutBuilder(
+                  builder: (context, constraints) {
+                    final layers = LandscapeVideoLayout.layers(
+                      surfaceKey: ValueKey(
+                        'feed_surface_$key-${c.parkedVersion}',
+                      ),
+                      player: display,
+                      enabled: widget.enableLandscapeFullscreen && !pip,
+                      isActive: isActive,
+                      fullscreenOpen: _landscapeFullscreen,
+                      viewport: Size(
+                        constraints.maxWidth,
+                        constraints.maxHeight,
+                      ),
+                      padding: MediaQuery.paddingOf(context),
+                      fullscreenLabel: widget.landscapeFullscreenLabel,
+                      onFullscreen: _enterLandscapeFullscreen,
+                    );
+                    return Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        ...layers.behind,
+                        if (!pip &&
+                            isActive &&
+                            widget.showBufferingIndicator &&
+                            !c.videoFrameReady &&
+                            !c.hasPlaybackError)
+                          Center(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const CircularProgressIndicator(
+                                  color: Colors.white,
+                                ),
+                                if (c.showLoadingPrompt) ...[
+                                  const SizedBox(height: 14),
+                                  const Text(
+                                    'Taking longer than usual…',
+                                    style: TextStyle(color: Colors.white70),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ],
+                              ],
                             ),
-                            if (c.showLoadingPrompt) ...[
-                              const SizedBox(height: 14),
-                              const Text(
-                                'Taking longer than usual…',
-                                style: TextStyle(color: Colors.white70),
-                                textAlign: TextAlign.center,
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    if (!pip && isActive && c.hasPlaybackError)
-                      _PlaybackRetryOverlay(
-                        message: c.errorMessage ?? 'Playback failed',
-                        onRetry: c.retryPlayback,
-                      ),
-                    if (!pip && isActive && widget.enableGestures)
-                      const Positioned.fill(child: _FeedGestureLayer()),
-                    if (!pip && widget.overlayBuilder != null)
-                      widget.overlayBuilder!(context, slot),
-                  ],
+                          ),
+                        if (!pip && isActive && c.hasPlaybackError)
+                          _PlaybackRetryOverlay(
+                            message: c.errorMessage ?? 'Playback failed',
+                            onRetry: c.retryPlayback,
+                          ),
+                        if (!pip && isActive && widget.enableGestures)
+                          const Positioned.fill(child: _FeedGestureLayer()),
+                        if (!pip && widget.overlayBuilder != null)
+                          widget.overlayBuilder!(context, slot),
+                        ...layers.above,
+                      ],
+                    );
+                  },
                 );
               },
             ),
           ),
         ),
+      ),
+    );
+
+    return PopScope(
+      canPop: !_landscapeFullscreen,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop || !_landscapeFullscreen) return;
+        _exitLandscapeFullscreen();
+      },
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          feed,
+          if (_landscapeFullscreen)
+            LandscapeFullscreenStage(
+              controller: c.player,
+              exitLabel: widget.exitLandscapeFullscreenLabel,
+              onExit: _exitLandscapeFullscreen,
+              onPlaybackEnded: _exitLandscapeFullscreen,
+              onTap: widget.enableGestures
+                  ? () {
+                      c.togglePlayPause();
+                    }
+                  : null,
+            ),
+        ],
       ),
     );
   }

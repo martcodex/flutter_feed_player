@@ -11,6 +11,7 @@ class PlayerSurface extends StatelessWidget {
     required this.controller,
     this.fit = BoxFit.cover,
     this.minLogicalSize = const Size(720, 1280),
+    this.letterbox = false,
   });
 
   final VideoPlayerController? controller;
@@ -18,6 +19,9 @@ class PlayerSurface extends StatelessWidget {
 
   /// Logical floor so platform ABR does not pick a soft low rung.
   final Size minLogicalSize;
+
+  /// Fit the real video aspect inside the parent instead of cover-cropping.
+  final bool letterbox;
 
   @override
   Widget build(BuildContext context) {
@@ -28,6 +32,19 @@ class PlayerSurface extends StatelessWidget {
     final size = ctrl.value.size;
     final w = size.width > 0 ? size.width : minLogicalSize.width;
     final h = size.height > 0 ? size.height : minLogicalSize.height;
+
+    if (letterbox) {
+      final aspect = h <= 0 ? 16 / 9 : w / h;
+      return ColoredBox(
+        color: Colors.black,
+        child: Center(
+          child: AspectRatio(
+            aspectRatio: aspect,
+            child: VideoPlayer(ctrl),
+          ),
+        ),
+      );
+    }
 
     // Platform views ignore [FittedBox] transforms, and iOS PiP needs that
     // AVPlayerLayer to have a real on-screen frame.

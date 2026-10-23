@@ -22,3 +22,6 @@ example/build/
 .build/
 .swiftpm/
 ios/FlutterFramework/
+
+# FVM Version Cache
+.fvm/

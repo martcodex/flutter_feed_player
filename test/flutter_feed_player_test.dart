@@ -224,6 +224,27 @@ void main() {
     expect(PlayerFactory.isAssetUrl('https://x/a.mp4'), isFalse);
   });
 
+  test('landscape layout is 16:9 or wider than tall', () {
+    expect(LandscapeVideoLayout.isWide(const Size(1920, 1080)), isTrue);
+    expect(LandscapeVideoLayout.isWide(const Size(16, 9)), isTrue);
+    expect(LandscapeVideoLayout.isWide(const Size(4, 3)), isTrue);
+    expect(LandscapeVideoLayout.isWide(const Size(1080, 1920)), isFalse);
+    expect(LandscapeVideoLayout.isWide(const Size(9, 16)), isFalse);
+    expect(LandscapeVideoLayout.isWide(const Size(1000, 1000)), isFalse);
+    expect(LandscapeVideoLayout.isWide(Size.zero), isFalse);
+
+    final rect = LandscapeVideoLayout.frame(
+      viewport: const Size(390, 844),
+      aspectRatio: 16 / 9,
+      padding: const EdgeInsets.only(top: 47),
+    );
+    expect(rect.width / rect.height, closeTo(16 / 9, 0.02));
+    expect(rect.center.dy, closeTo(422, 1));
+    expect(rect.center.dx, closeTo(195, 1));
+    expect(rect.left, greaterThanOrEqualTo(0));
+    expect(rect.right, lessThanOrEqualTo(390));
+  });
+
   test('MediaFormat platform support', () {
     expect(MediaFormat.isKindSupportedOnCurrentPlatform('mp4'), isTrue);
     expect(MediaFormat.isKindSupportedOnCurrentPlatform('hls'), isTrue);

@@ -58,6 +58,7 @@ class _FeedDemoPageState extends State<FeedDemoPage> {
   Widget build(BuildContext context) {
     final bottom = MediaQuery.paddingOf(context).bottom;
     final p = widget.params;
+    final l10n = DemoLocaleScope.l10nOf(context);
     return Scaffold(
       backgroundColor: Colors.black,
       body: FeedPlayerView(
@@ -67,6 +68,9 @@ class _FeedDemoPageState extends State<FeedDemoPage> {
         showBufferingIndicator: p.showBufferingIndicator,
         enablePullToRefresh: p.enablePullToRefresh,
         enablePullToLoadMore: p.enablePullToLoadMore,
+        enableLandscapeFullscreen: p.showLandscapeFullscreen,
+        landscapeFullscreenLabel: l10n.fullscreen,
+        exitLandscapeFullscreenLabel: l10n.exitFullscreen,
         overlayBuilder: (context, slot) => _DemoFeedChrome(
           slot: slot,
           bottomInset: bottom + 8,
